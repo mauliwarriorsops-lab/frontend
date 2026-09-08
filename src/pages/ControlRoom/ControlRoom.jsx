@@ -132,9 +132,31 @@ const CONTROL_ROOM_REQUEST_TIMEOUT = 5000;
 |--------------------------------------------------------------------------
 */
 
+/*
+|--------------------------------------------------------------------------
+| OBS OVERLAY BASE URL
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+|
+| Do NOT use window.location.origin as the fallback here.
+|
+| Vercel deployment URLs can change between deployments. If the Control
+| Room is opened from an old Vercel deployment, window.location.origin
+| would generate OBS links pointing to that old/deleted deployment.
+|
+| VITE_OVERLAY_BASE_URL can still override this in Vercel Environment
+| Variables when a permanent custom overlay domain is configured.
+|
+| Current MWOPS frontend deployment:
+| https://frontend-jet-eight-s2b19axo7v.vercel.app
+|
+|--------------------------------------------------------------------------
+*/
+
 const OVERLAY_BASE_URL = (
   import.meta.env.VITE_OVERLAY_BASE_URL ||
-  window.location.origin
+  "https://frontend-jet-eight-s2b19axo7v.vercel.app"
 ).replace(/\/+$/, "");
 
 /*
