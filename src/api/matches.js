@@ -18,10 +18,28 @@
 |--------------------------------------------------------------------------
 */
 
+/*
+|--------------------------------------------------------------------------
+| API CONFIGURATION
+|--------------------------------------------------------------------------
+|
+| Local development:
+|   VITE_API_URL=http://localhost:5000/api
+|
+| Production:
+|   VITE_API_URL=https://backend-no95.onrender.com/api
+|
+| The production fallback prevents a deployed Vercel build
+| from accidentally trying to call localhost.
+|
+|--------------------------------------------------------------------------
+*/
+
 const API_BASE_URL = (
   import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_BACKEND_URL ||
-  "http://localhost:5000/api"
+  "https://backend-no95.onrender.com/api"
 ).replace(/\/+$/, "");
 
 /*
@@ -137,21 +155,6 @@ function getResponseData(
 /*
 |--------------------------------------------------------------------------
 | NORMALIZE MATCH STATUS
-|--------------------------------------------------------------------------
-|
-| The Match Center uses:
-|
-|   live
-|   scheduled
-|   paused
-|   completed
-|   cancelled
-|
-| Creation is intentionally restricted to:
-|
-|   live
-|   scheduled
-|
 |--------------------------------------------------------------------------
 */
 
@@ -273,18 +276,6 @@ export async function getMatches({
   const query =
     params.toString();
 
-  /*
-  |--------------------------------------------------------------------------
-  | Cache-busting timestamp
-  |--------------------------------------------------------------------------
-  |
-  | The backend/database is authoritative.
-  | Never allow an old match registry response
-  | to remain in browser/proxy cache.
-  |
-  |--------------------------------------------------------------------------
-  */
-
   const cacheBuster =
     `_mwops_ts=${Date.now()}`;
 
@@ -401,27 +392,6 @@ export async function getMatch(
 |--------------------------------------------------------------------------
 | NORMALIZE TEAM SLOTS
 |--------------------------------------------------------------------------
-|
-| Current MWOPS match workflow:
-|
-| team_slots: [
-|   {
-|     slot: 1,
-|     team_id: null,
-|     team_name: "Team Alpha",
-|     team_tag: "ALPHA",
-|     players: [
-|       {
-|         player_id: null,
-|         gamer_tag: "PlayerOne"
-|       }
-|     ]
-|   }
-| ]
-|
-| Empty slots are intentionally removed.
-|
-|--------------------------------------------------------------------------
 */
 
 function normalizeTeamSlots(
@@ -483,12 +453,6 @@ function normalizeTeamSlots(
               ).trim()
             : "";
 
-        /*
-        |--------------------------------------------------------------------------
-        | NORMALIZE PLAYERS
-        |--------------------------------------------------------------------------
-        */
-
         const players =
           Array.isArray(
             slotData.players
@@ -534,12 +498,6 @@ function normalizeTeamSlots(
                           ).trim()
                         : "";
 
-                    /*
-                    |--------------------------------------------------------------------------
-                    | Ignore completely empty player rows
-                    |--------------------------------------------------------------------------
-                    */
-
                     if (
                       !playerId &&
                       !gamerTag
@@ -576,19 +534,6 @@ function normalizeTeamSlots(
                 )
                 .filter(Boolean)
             : [];
-
-        /*
-        |--------------------------------------------------------------------------
-        | Ignore completely empty slots
-        |--------------------------------------------------------------------------
-        |
-        | A slot is valid when it has either:
-        |
-        |   - an existing team_id
-        | | - a new team_name
-        |
-        |--------------------------------------------------------------------------
-        */
 
         if (
           !teamId &&
@@ -646,12 +591,6 @@ function normalizeTeamSlots(
 export async function createMatch(
   payload = {}
 ) {
-  /*
-  |--------------------------------------------------------------------------
-  | CLIENT-SIDE VALIDATION
-  |--------------------------------------------------------------------------
-  */
-
   if (
     !payload ||
     typeof payload !==
@@ -689,52 +628,15 @@ export async function createMatch(
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | MATCH MODE
-  |--------------------------------------------------------------------------
-  |
-  | The UI explicitly chooses:
-  |
-  |   Radio        -> live
-  |   Calendar     -> scheduled
-  |
-  | No third creation state is allowed.
-  |
-  |--------------------------------------------------------------------------
-  */
-
   const selectedStatus =
     validateCreateStatus(
       payload.status
     );
 
-  /*
-  |--------------------------------------------------------------------------
-  | TEAM SLOTS
-  |--------------------------------------------------------------------------
-  |
-  | The new MWOPS workflow uses team_slots,
-  | NOT team_ids.
-  |
-  |--------------------------------------------------------------------------
-  */
-
   const normalizedTeamSlots =
     normalizeTeamSlots(
       payload.team_slots
     );
-
-  /*
-  |--------------------------------------------------------------------------
-  | LEGACY TEAM IDS
-  |--------------------------------------------------------------------------
-  |
-  | Keep support for older callers that may
-  | still send team_ids.
-  |
-  |--------------------------------------------------------------------------
-  */
 
   const normalizedTeamIds =
     Array.isArray(
@@ -759,17 +661,6 @@ export async function createMatch(
         ]
       : [];
 
-  /*
-  |--------------------------------------------------------------------------
-  | REQUIRE AT LEAST ONE TEAM
-  |--------------------------------------------------------------------------
-  |
-  | This remains consistent with the current
-  | Match API behavior.
-  |
-  |--------------------------------------------------------------------------
-  */
-
   if (
     normalizedTeamSlots.length ===
       0 &&
@@ -780,12 +671,6 @@ export async function createMatch(
       "Add at least one team to the match before creating it."
     );
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | NORMALIZE MAIN MATCH PAYLOAD
-  |--------------------------------------------------------------------------
-  */
 
   const normalizedPayload =
     {
@@ -800,78 +685,21 @@ export async function createMatch(
           payload.name
         ).trim(),
 
-      /*
-      |--------------------------------------------------------------------------
-      | USER SELECTED MODE
-      |--------------------------------------------------------------------------
-      */
-
       status:
         selectedStatus,
-
-      /*
-      |--------------------------------------------------------------------------
-      | SCHEDULED TIMESTAMP
-      |--------------------------------------------------------------------------
-      |
-      | If the UI/API provides a scheduled time,
-      | preserve it.
-      |
-      | Current Quick Match Setup may send null.
-      |
-      |--------------------------------------------------------------------------
-      */
 
       scheduled_at:
         payload.scheduled_at ??
         null,
 
-      /*
-      |--------------------------------------------------------------------------
-      | TEAM SLOT SYSTEM
-      |--------------------------------------------------------------------------
-      */
-
       team_slots:
         normalizedTeamSlots,
     };
-
-  /*
-  |--------------------------------------------------------------------------
-  | STATUS-SPECIFIC TIMESTAMPS
-  |--------------------------------------------------------------------------
-  |
-  | LIVE
-  | ----
-  | The backend should treat the match as
-  | immediately live.
-  |
-  | We only send started_at when explicitly
-  | supplied by the caller. This avoids the
-  | frontend and backend competing over the
-  | authoritative timestamp.
-  |
-  |
-  | SCHEDULED
-  | ---------
-  | A scheduled match must not accidentally
-  | receive a live started_at value.
-  |
-  |--------------------------------------------------------------------------
-  */
 
   if (
     selectedStatus ===
     "scheduled"
   ) {
-    /*
-    |--------------------------------------------------------------------------
-    | Scheduled matches should not be created
-    | with an ended timestamp unless explicitly
-    | required by a special caller.
-    |--------------------------------------------------------------------------
-    */
-
     if (
       payload.started_at !==
       undefined
@@ -893,13 +721,6 @@ export async function createMatch(
     selectedStatus ===
     "live"
   ) {
-    /*
-    |--------------------------------------------------------------------------
-    | A live match must never retain an old
-    | scheduled timestamp.
-    |--------------------------------------------------------------------------
-    */
-
     normalizedPayload.scheduled_at =
       null;
 
@@ -922,16 +743,6 @@ export async function createMatch(
     }
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | LEGACY TEAM IDS
-  |--------------------------------------------------------------------------
-  |
-  | Only send team_ids when explicitly supplied.
-  |
-  |--------------------------------------------------------------------------
-  */
-
   if (
     normalizedTeamIds.length >
     0
@@ -939,12 +750,6 @@ export async function createMatch(
     normalizedPayload.team_ids =
       normalizedTeamIds;
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | OPTIONAL GAME
-  |--------------------------------------------------------------------------
-  */
 
   if (
     payload.game !==
@@ -957,16 +762,6 @@ export async function createMatch(
           ).trim()
         : null;
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | MAP
-  |--------------------------------------------------------------------------
-  |
-  | Database column is `map`.
-  |
-  |--------------------------------------------------------------------------
-  */
 
   if (
     payload.map !==
@@ -990,17 +785,6 @@ export async function createMatch(
         : null;
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | OPTIONAL START / END
-  |--------------------------------------------------------------------------
-  |
-  | Only include these for LIVE when explicitly
-  | provided, or for compatibility with existing
-  | callers.
-  |--------------------------------------------------------------------------
-  */
-
   if (
     selectedStatus ===
       "live" &&
@@ -1023,12 +807,6 @@ export async function createMatch(
       null;
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | DEBUG LOG
-  |--------------------------------------------------------------------------
-  */
-
   console.log(
     "MWOPS - CREATE MATCH REQUEST:",
     normalizedPayload
@@ -1043,12 +821,6 @@ export async function createMatch(
     "MWOPS - TEAM SLOTS:",
     normalizedPayload.team_slots
   );
-
-  /*
-  |--------------------------------------------------------------------------
-  | POST
-  |--------------------------------------------------------------------------
-  */
 
   let response;
 
@@ -1086,12 +858,6 @@ export async function createMatch(
     );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | RESPONSE
-  |--------------------------------------------------------------------------
-  */
-
   const result =
     await handleResponse(
       response
@@ -1106,16 +872,6 @@ export async function createMatch(
     "MWOPS - CREATE MATCH RESPONSE:",
     createdMatch
   );
-
-  /*
-  |--------------------------------------------------------------------------
-  | VERIFY RETURNED STATUS
-  |--------------------------------------------------------------------------
-  |
-  | This catches a backend that accepted the
-  | request but silently changed the status.
-  |--------------------------------------------------------------------------
-  */
 
   const returnedStatus =
     normalizeMatchStatus(
@@ -1173,12 +929,6 @@ export async function updateMatch(
       ...payload,
     };
 
-  /*
-  |--------------------------------------------------------------------------
-  | Normalize team slots during update too
-  |--------------------------------------------------------------------------
-  */
-
   if (
     payload.team_slots !==
     undefined
@@ -1189,12 +939,6 @@ export async function updateMatch(
       );
   }
 
-  /*
-  |--------------------------------------------------------------------------
-  | Normalize status
-  |--------------------------------------------------------------------------
-  */
-
   if (
     normalizedPayload.status !==
     undefined
@@ -1204,12 +948,6 @@ export async function updateMatch(
         normalizedPayload.status
       );
   }
-
-  /*
-  |--------------------------------------------------------------------------
-  | Normalize map
-  |--------------------------------------------------------------------------
-  */
 
   if (
     normalizedPayload.map_name !==
@@ -1223,22 +961,10 @@ export async function updateMatch(
 
   delete normalizedPayload.map_name;
 
-  /*
-  |--------------------------------------------------------------------------
-  | STATUS-SPECIFIC UPDATE SAFETY
-  |--------------------------------------------------------------------------
-  */
-
   if (
     normalizedPayload.status ===
     "scheduled"
   ) {
-    /*
-    |--------------------------------------------------------------------------
-    | Do not accidentally keep live timestamps
-    |--------------------------------------------------------------------------
-    */
-
     if (
       normalizedPayload.started_at !==
       undefined
@@ -1260,13 +986,6 @@ export async function updateMatch(
     normalizedPayload.status ===
     "live"
   ) {
-    /*
-    |--------------------------------------------------------------------------
-    | A live match should not retain a
-    | scheduled timestamp.
-    |--------------------------------------------------------------------------
-    */
-
     if (
       normalizedPayload.scheduled_at !==
       undefined
@@ -1321,11 +1040,6 @@ export async function updateMatch(
 /*
 |--------------------------------------------------------------------------
 | START MATCH
-|--------------------------------------------------------------------------
-|
-| Used when a scheduled match is actually
-| started from Match Control.
-|
 |--------------------------------------------------------------------------
 */
 
