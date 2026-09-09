@@ -618,6 +618,9 @@ function RoundCard({
   onDeleteMatch,
   deletingRoundId,
   deletingMatchId,
+  onSettings,
+  onShare,
+  onDownload,
 }) {
   const state = getRoundState(round.matches);
   const matchCount = round.matches.length;
@@ -1214,90 +1217,30 @@ function RoundsPage({
                 type="button"
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Tournament Settings"
-                onClick={() =>
-                  window.scrollTo(
-                    {
-                      top: 0,
-                      behavior:
-                        "smooth",
-                    }
-                  )
-                }
+                aria-label="Open Tournament Settings"
+                onClick={onSettings}
               >
-                <Settings
-                  size={19}
-                />
+                <Settings size={19} />
               </button>
 
               <button
                 type="button"
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Share Tournament"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(
-                      window.location.href
-                    );
-                  } catch {
-                    // Clipboard unavailable.
-                  }
-                }}
+                aria-label="Share Tournament"
+                onClick={onShare}
               >
-                <Share2
-                  size={18}
-                />
+                <Share2 size={18} />
               </button>
 
               <button
                 type="button"
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
-                title="Export"
-                onClick={() => {
-                  const data =
-                    JSON.stringify(
-                      {
-                        tournament,
-                        matches,
-                        rounds,
-                      },
-                      null,
-                      2
-                    );
-
-                  const blob =
-                    new Blob(
-                      [data],
-                      {
-                        type: "application/json",
-                      }
-                    );
-
-                  const url =
-                    URL.createObjectURL(
-                      blob
-                    );
-
-                  const link =
-                    document.createElement(
-                      "a"
-                    );
-
-                  link.href =
-                    url;
-
-                  link.download =
-                    `${tournament?.name || "tournament"}-export.json`;
-
-                  link.click();
-
-                  URL.revokeObjectURL(
-                    url
-                  );
-                }}
+                title="Export Tournament"
+                aria-label="Export Tournament"
+                onClick={onDownload}
               >
-                <Download
-                  size={18}
-                />
+                <Download size={18} />
               </button>
             </div>
           </div>
@@ -1536,13 +1479,28 @@ function TeamsPage({
                   <div className="min-w-0">
                     <h3 className="truncate text-sm font-extrabold text-white">
                       {team.name ||
+                        team.team_name ||
                         "Unnamed Team"}
                     </h3>
 
-                    <p className="mt-1 text-[10px] uppercase tracking-[0.12em] text-[#626c67]">
-                      {team.short_name ||
-                        "TEAM"}
-                    </p>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-[#626c67]">
+                      <span>
+                        {team.short_name ||
+                          team.tag ||
+                          "TEAM"}
+                      </span>
+
+                      {(team.slot_number ??
+                        team.slot) !==
+                        undefined && (
+                        <>
+                          <span className="h-1 w-1 rounded-full bg-[#3f4844]" />
+                          <span>
+                            SLOT {team.slot_number ?? team.slot}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1605,6 +1563,14 @@ function StandingsPage({
                   </th>
 
                   <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
+                    Matches
+                  </th>
+
+                  <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
+                    Wins
+                  </th>
+
+                  <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
                     Kills
                   </th>
 
@@ -1645,12 +1611,27 @@ function StandingsPage({
                       </td>
 
                       <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
+                        {row.matches ??
+                          row.matches_played ??
+                          row.match_count ??
+                          0}
+                      </td>
+
+                      <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
+                        {row.wins ??
+                          0}
+                      </td>
+
+                      <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
                         {row.kills ??
+                          row.total_kills ??
+                          row.eliminations ??
                           0}
                       </td>
 
                       <td className="px-6 py-5 text-right text-sm font-extrabold text-[#f2b632]">
-                        {row.points ??
+                        {row.total_points ??
+                          row.points ??
                           row.score ??
                           0}
                       </td>
@@ -1674,6 +1655,9 @@ function StandingsPage({
 
 function SettingsPage({
   tournament,
+  roundsCount,
+  teamsCount,
+  matchesCount,
 }) {
   return (
     <div className="px-6 py-8 lg:px-10 lg:py-10">
@@ -1738,6 +1722,21 @@ function SettingsPage({
                     tournament.status
                   }
                 />
+              }
+            />
+
+            <SettingRow
+              label="Tournament ID"
+              value={
+                tournament.id ||
+                "—"
+              }
+            />
+
+            <SettingRow
+              label="Competition Data"
+              value={
+                `${teamsCount} teams • ${roundsCount} rounds • ${matchesCount} matches`
               }
             />
           </div>
@@ -1981,6 +1980,11 @@ function TournamentDetail() {
     setError,
   ] = useState("");
 
+  const [
+    notice,
+    setNotice,
+  ] = useState("");
+
   /*
   |--------------------------------------------------------------------------
   | NEW ROUND STATE
@@ -2016,6 +2020,29 @@ function TournamentDetail() {
     deletingMatchId,
     setDeletingMatchId,
   ] = useState(null);
+
+  /*
+  |--------------------------------------------------------------------------
+  | OPERATOR NOTICE
+  |--------------------------------------------------------------------------
+  */
+
+  const showNotice =
+    useCallback(
+      (message) => {
+        setNotice(message);
+
+        window.clearTimeout(
+          showNotice.timer
+        );
+
+        showNotice.timer =
+          window.setTimeout(() => {
+            setNotice("");
+          }, 2600);
+      },
+      []
+    );
 
   /*
   |--------------------------------------------------------------------------
@@ -2209,28 +2236,113 @@ function TournamentDetail() {
     useCallback(
       async () => {
         if (!tournamentId) {
+          setTeams([]);
           return;
         }
 
         try {
-          setTeamsLoading(
-            true
-          );
+          setTeamsLoading(true);
 
           /*
           |--------------------------------------------------------------------------
-          | The current schema does not have a direct tournament_id
-          | column on teams.
+          | The MWOPS Teams API returns the registered team records.
           |
-          | Do not fabricate a relationship.
+          | Teams contain tournament_id, so we load the real registry and
+          | keep only teams assigned to this tournament. This is the same
+          | backend relationship used by the match/standings services.
           |--------------------------------------------------------------------------
           */
 
+          const data =
+            await request("/teams");
+
+          const raw =
+            data?.teams ??
+            data?.data ??
+            data;
+
+          const list =
+            Array.isArray(raw)
+              ? raw
+              : Array.isArray(raw?.teams)
+                ? raw.teams
+                : Array.isArray(raw?.data)
+                  ? raw.data
+                  : [];
+
+          const tournamentTeams =
+            list
+              .filter(Boolean)
+              .filter((team) => {
+                const teamTournamentId =
+                  team?.tournament_id ??
+                  team?.tournamentId ??
+                  team?.tournament?.id;
+
+                /*
+                 * If the API already returns only the requested scope,
+                 * keep the record. Otherwise require the tournament match.
+                 */
+                if (
+                  teamTournamentId ===
+                    undefined ||
+                  teamTournamentId === null ||
+                  String(teamTournamentId).trim() === ""
+                ) {
+                  return true;
+                }
+
+                return (
+                  String(teamTournamentId) ===
+                  String(tournamentId)
+                );
+              })
+              .sort((a, b) => {
+                const slotA =
+                  Number(
+                    a?.slot_number ??
+                    a?.slot ??
+                    0
+                  );
+
+                const slotB =
+                  Number(
+                    b?.slot_number ??
+                    b?.slot ??
+                    0
+                  );
+
+                if (
+                  slotA > 0 &&
+                  slotB > 0 &&
+                  slotA !== slotB
+                ) {
+                  return slotA - slotB;
+                }
+
+                return String(
+                  a?.name ||
+                    a?.short_name ||
+                    ""
+                ).localeCompare(
+                  String(
+                    b?.name ||
+                      b?.short_name ||
+                      ""
+                  )
+                );
+              });
+
+          setTeams(tournamentTeams);
+        } catch (err) {
+          console.error(
+            "Failed to load tournament teams:",
+            err
+          );
+
           setTeams([]);
         } finally {
-          setTeamsLoading(
-            false
-          );
+          setTeamsLoading(false);
         }
       },
       [
@@ -2248,43 +2360,70 @@ function TournamentDetail() {
     useCallback(
       async () => {
         if (!tournamentId) {
+          setStandings([]);
           return;
         }
 
         try {
-          setStandingsLoading(
-            true
-          );
+          setStandingsLoading(true);
 
-          const data =
-            await request(
-              `/standings?tournament_id=${encodeURIComponent(
-                tournamentId
-              )}`
-            );
+          let data;
 
-          const standingsData =
-            data?.standings ||
+          try {
+            data =
+              await request(
+                `/standings?tournament_id=${encodeURIComponent(
+                  tournamentId
+                )}`
+              );
+          } catch (primaryError) {
+            /*
+             * The official standings service also exposes a leaderboard
+             * route using tournamentId. Keep this as a compatibility
+             * fallback for deployments using that route.
+             */
+            data =
+              await request(
+                `/standings/leaderboard?tournamentId=${encodeURIComponent(
+                  tournamentId
+                )}`
+              );
+          }
+
+          const raw =
+            data?.standings ??
+            data?.data ??
             data;
 
+          const standingsData =
+            Array.isArray(raw)
+              ? raw
+              : Array.isArray(raw?.standings)
+                ? raw.standings
+                : Array.isArray(raw?.data)
+                  ? raw.data
+                  : [];
+
           setStandings(
-            Array.isArray(
-              standingsData
-            )
-              ? standingsData
-              : []
+            standingsData
+              .filter(Boolean)
+              .map((row, index) => ({
+                ...row,
+                rank:
+                  row?.rank ??
+                  row?.position ??
+                  index + 1,
+              }))
           );
         } catch (err) {
           console.error(
-            "Failed to load standings:",
+            "Failed to load tournament standings:",
             err
           );
 
           setStandings([]);
         } finally {
-          setStandingsLoading(
-            false
-          );
+          setStandingsLoading(false);
         }
       },
       [
@@ -2449,6 +2588,235 @@ function TournamentDetail() {
         );
       }
     };
+
+  /*
+  |--------------------------------------------------------------------------
+  | TOURNAMENT ACTIONS
+  |--------------------------------------------------------------------------
+  */
+
+  const handleOpenSettings =
+    useCallback(() => {
+      setActiveTab("settings");
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }, []);
+
+  const handleShareTournament =
+    useCallback(async () => {
+      const shareUrl =
+        window.location.href;
+
+      try {
+        if (
+          navigator.share
+        ) {
+          await navigator.share({
+            title:
+              tournament?.name ||
+              "MWOPS Tournament",
+            text:
+              `View ${tournament?.name || "this tournament"} on MWOPS.`,
+            url: shareUrl,
+          });
+
+          showNotice(
+            "Tournament shared."
+          );
+
+          return;
+        }
+
+        if (
+          navigator.clipboard &&
+          window.isSecureContext
+        ) {
+          await navigator.clipboard.writeText(
+            shareUrl
+          );
+
+          showNotice(
+            "Tournament link copied."
+          );
+
+          return;
+        }
+
+        /*
+         * Clipboard API may be unavailable in an embedded/HTTP
+         * environment. Use the legacy selection method as fallback.
+         */
+        const textArea =
+          document.createElement(
+            "textarea"
+          );
+
+        textArea.value =
+          shareUrl;
+
+        textArea.setAttribute(
+          "readonly",
+          ""
+        );
+
+        textArea.style.position =
+          "fixed";
+        textArea.style.left =
+          "-9999px";
+
+        document.body.appendChild(
+          textArea
+        );
+
+        textArea.select();
+
+        const copied =
+          document.execCommand(
+            "copy"
+          );
+
+        document.body.removeChild(
+          textArea
+        );
+
+        if (!copied) {
+          throw new Error(
+            "Clipboard access is unavailable."
+          );
+        }
+
+        showNotice(
+          "Tournament link copied."
+        );
+      } catch (err) {
+        /*
+         * navigator.share throws when the user closes the native share
+         * sheet. Do not show an error in that case.
+         */
+        if (
+          err?.name ===
+          "AbortError"
+        ) {
+          return;
+        }
+
+        console.error(
+          "Failed to share tournament:",
+          err
+        );
+
+        showNotice(
+          "Unable to share automatically. Copy the URL from your browser."
+        );
+      }
+    }, [
+      tournament?.name,
+      showNotice,
+    ]);
+
+  const handleDownloadTournament =
+    useCallback(() => {
+      try {
+        const exportPayload = {
+          exported_at:
+            new Date().toISOString(),
+          tournament,
+          rounds,
+          matches,
+          teams,
+          standings,
+        };
+
+        const data =
+          JSON.stringify(
+            exportPayload,
+            null,
+            2
+          );
+
+        const blob =
+          new Blob(
+            [data],
+            {
+              type:
+                "application/json;charset=utf-8",
+            }
+          );
+
+        const url =
+          URL.createObjectURL(
+            blob
+          );
+
+        const link =
+          document.createElement(
+            "a"
+          );
+
+        const safeName =
+          String(
+            tournament?.name ||
+              "tournament"
+          )
+            .trim()
+            .replace(
+              /[^a-z0-9]+/gi,
+              "-"
+            )
+            .replace(
+              /^-+|-+$/g,
+              ""
+            )
+            .toLowerCase() ||
+          "tournament";
+
+        link.href =
+          url;
+
+        link.download =
+          `${safeName}-mwops-export.json`;
+
+        document.body.appendChild(
+          link
+        );
+
+        link.click();
+
+        document.body.removeChild(
+          link
+        );
+
+        window.setTimeout(
+          () =>
+            URL.revokeObjectURL(
+              url
+            ),
+          1000
+        );
+
+        showNotice(
+          "Tournament export downloaded."
+        );
+      } catch (err) {
+        console.error(
+          "Failed to export tournament:",
+          err
+        );
+
+        showNotice(
+          "Unable to download tournament export."
+        );
+      }
+    }, [
+      tournament,
+      rounds,
+      matches,
+      teams,
+      standings,
+      showNotice,
+    ]);
 
   /*
   |--------------------------------------------------------------------------
@@ -2720,6 +3088,7 @@ function TournamentDetail() {
           mask-image:linear-gradient(to bottom, rgba(0,0,0,.7), transparent 92%);
         }
         .mwops-control-topbar {
+          display:none;
           position:sticky;
           top:0;
           z-index:40;
@@ -3390,6 +3759,7 @@ function TournamentDetail() {
 
         /* Top bar */
         .mwops-control-topbar {
+          display:none;
           background:rgba(6,8,10,.82);
           border-bottom-color:rgba(255,255,255,.075);
           box-shadow:0 12px 40px rgba(0,0,0,.16);
@@ -3646,6 +4016,15 @@ function TournamentDetail() {
 
       <div className="mwops-control-shell">
 
+        {notice && (
+          <div className="pointer-events-none fixed right-6 top-6 z-[200]">
+            <div className="flex items-center gap-3 rounded-xl border border-[#e7ad2e]/30 bg-[#0d1115]/95 px-4 py-3 text-xs font-extrabold text-white shadow-[0_20px_70px_rgba(0,0,0,.45)] backdrop-blur-xl">
+              <span className="h-2 w-2 rounded-full bg-[#e7ad2e] shadow-[0_0_12px_rgba(231,173,46,.7)]" />
+              {notice}
+            </div>
+          </div>
+        )}
+
         <TournamentSidebar
           activeTab={activeTab}
           onTabChange={setActiveTab}
@@ -3682,55 +4061,6 @@ function TournamentDetail() {
           newRoundError
         }
       />
-
-      {/* TOP NAVIGATION */}
-
-      <header className="mwops-control-topbar">
-        <div className="mwops-control-topbar-inner">
-          <div className="mwops-control-brand">
-            <div className="mwops-control-brand-mark">M</div>
-            <div>
-              <div className="mwops-control-brand-name">MW<span>O</span>PS</div>
-              <div className="mwops-control-brand-sub">Match Warfare Operations</div>
-            </div>
-          </div>
-
-          <div className="hidden xl:block flex-1">
-            <div className="text-[7px] font-black uppercase tracking-[1.3px] text-[#515a60]">
-              Tournament Operations / Control Workspace
-            </div>
-            <div className="mt-1 text-[10px] font-bold text-[#a0a6a9]">
-              {tournament?.name || "Tournament"}
-            </div>
-          </div>
-
-          <nav className="mwops-control-tabs" aria-label="Tournament sections">
-            {[
-              { id: "rounds", label: "Rounds", icon: Layers3 },
-              { id: "teams", label: "Teams", icon: Users },
-              { id: "standings", label: "Standings", icon: BarChart3 },
-              { id: "settings", label: "Settings", icon: Settings },
-            ].map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveTab(id)}
-                className={`mwops-control-tab ${activeTab === id ? "active" : ""}`}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <Icon size={12} />
-                  {label}
-                </span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="mwops-control-status">
-            <span className="mwops-control-status-dot" />
-            Operational
-          </div>
-        </div>
-      </header>
 
       <div className="mwops-control-main">
         {activeTab ===
@@ -3781,6 +4111,15 @@ function TournamentDetail() {
             deletingMatchId={
               deletingMatchId
             }
+            onSettings={
+              handleOpenSettings
+            }
+            onShare={
+              handleShareTournament
+            }
+            onDownload={
+              handleDownloadTournament
+            }
           />
         )}
 
@@ -3813,6 +4152,15 @@ function TournamentDetail() {
           <SettingsPage
             tournament={
               tournament
+            }
+            roundsCount={
+              rounds.length
+            }
+            teamsCount={
+              teams.length
+            }
+            matchesCount={
+              matches.length
             }
           />
         )}
