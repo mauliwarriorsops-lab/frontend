@@ -1665,7 +1665,123 @@ function StandingsPage({
 |--------------------------------------------------------------------------
 | SETTINGS PAGE
 |--------------------------------------------------------------------------
+|
+| Tournament settings is intentionally styled after the supplied reference:
+| - tournament summary cards at the top
+| - green operational/scoring panel
+| - points per elimination
+| - 1–25 placement points
+|
+| The current TournamentDetail file does not expose a scoring/settings
+| persistence endpoint, so this section does not invent an API contract.
+| It displays the current MWOPS BGMI scoring configuration safely.
+|
+|--------------------------------------------------------------------------
 */
+
+const DEFAULT_PLACEMENT_POINTS = [
+  10, 6, 5, 4, 3, 2, 1, 1,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0,
+  0,
+];
+
+function SettingsStatCard({
+  icon: Icon,
+  value,
+  label,
+  badge,
+  accent = "cyan",
+}) {
+  const accents = {
+    cyan: {
+      border: "border-cyan-400/25",
+      icon: "bg-cyan-400/10 text-cyan-300",
+      glow: "bg-cyan-400/[0.055]",
+    },
+    orange: {
+      border: "border-[#e7ad2e]/25",
+      icon: "bg-[#e7ad2e]/10 text-[#f5c44b]",
+      glow: "bg-[#e7ad2e]/[0.055]",
+    },
+    green: {
+      border: "border-emerald-400/25",
+      icon: "bg-emerald-400/10 text-emerald-300",
+      glow: "bg-emerald-400/[0.055]",
+    },
+  };
+
+  const style = accents[accent] || accents.cyan;
+
+  return (
+    <div
+      className={`relative min-h-[148px] overflow-hidden rounded-[15px] border bg-[#101715] p-5 shadow-[0_18px_50px_rgba(0,0,0,.18)] ${style.border}`}
+    >
+      <div
+        className={`pointer-events-none absolute -right-14 -top-14 h-36 w-36 rounded-full blur-3xl ${style.glow}`}
+      />
+
+      <div className="relative flex items-start justify-between gap-4">
+        <div
+          className={`flex h-11 w-11 items-center justify-center rounded-xl ${style.icon}`}
+        >
+          <Icon size={21} />
+        </div>
+
+        <span className="rounded-full bg-white/[0.045] px-3 py-1.5 text-[9px] font-bold text-[#858e89]">
+          {badge}
+        </span>
+      </div>
+
+      <div className="relative mt-5">
+        <p className="mwops-display text-3xl leading-none text-white">
+          {value}
+        </p>
+        <p className="mt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#78827d]">
+          {label}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PlacementPoint({
+  position,
+  points,
+}) {
+  const highlighted = position <= 3;
+  const hasPoint = Number(points) > 0;
+
+  return (
+    <div
+      className={`flex min-h-[44px] items-center justify-between rounded-[9px] border px-3 ${
+        highlighted
+          ? "border-[#e7ad2e]/20 bg-[#e7ad2e]/[0.035]"
+          : "border-white/[0.08] bg-white/[0.018]"
+      }`}
+    >
+      <span
+        className={`text-[11px] font-extrabold ${
+          highlighted
+            ? "text-[#e7ad2e]"
+            : "text-[#8b9590]"
+        }`}
+      >
+        #{position}
+      </span>
+
+      <span
+        className={`text-sm font-black ${
+          hasPoint
+            ? "text-[#f3f2ed]"
+            : "text-[#dfe3df]"
+        }`}
+      >
+        {points}
+      </span>
+    </div>
+  );
+}
 
 function SettingsPage({
   tournament,
@@ -1673,129 +1789,279 @@ function SettingsPage({
   teamsCount,
   matchesCount,
 }) {
+  const tournamentStatus = String(
+    tournament?.status || "draft"
+  ).toLowerCase();
+
+  const statusLabel =
+    STATUS_CONFIG[tournamentStatus]?.label ||
+    "DRAFT";
+
+  const placementPoints = Array.from(
+    { length: 25 },
+    (_, index) =>
+      DEFAULT_PLACEMENT_POINTS[index] ?? 0
+  );
+
+  const totalConfiguredPlacementPoints =
+    placementPoints.reduce(
+      (sum, points) => sum + Number(points || 0),
+      0
+    );
+
   return (
-    <div className="px-6 py-8 lg:px-10 lg:py-10">
+    <div className="mwops-settings-page min-h-full bg-[#070a09]">
+      <style>{`
+        .mwops-settings-page {
+          --settings-green: #35d77b;
+          --settings-green-bright: #59ef98;
+          --settings-green-soft: rgba(53,215,123,.11);
+          --settings-cyan: #18c8df;
+          --settings-orange: #ff6417;
+          --settings-line: rgba(255,255,255,.075);
+        }
 
-      <div className="mb-8">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#f2b632]">
-          Tournament Configuration
-        </p>
+        .mwops-settings-page .settings-display {
+          font-family: "Arial Black", Inter, ui-sans-serif, system-ui, sans-serif;
+          font-weight: 1000;
+          letter-spacing: -1.7px;
+        }
 
-        <h1 className="mwops-display mt-2 text-4xl text-white">
-          SETTINGS
-        </h1>
+        .mwops-settings-page .settings-grid-bg {
+          background-image:
+            linear-gradient(rgba(255,255,255,.014) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,.014) 1px, transparent 1px);
+          background-size: 52px 52px;
+          mask-image: linear-gradient(to bottom, black, transparent 90%);
+        }
 
-        <p className="mt-2 text-sm text-[#69736e]">
-          Configure the operational behavior
-          of this tournament.
-        </p>
-      </div>
+        .mwops-settings-page .settings-green-panel {
+          position: relative;
+          overflow: hidden;
+          background:
+            radial-gradient(
+              circle at 78% 4%,
+              rgba(77,230,137,.15),
+              transparent 29%
+            ),
+            radial-gradient(
+              circle at 12% 90%,
+              rgba(27,133,78,.13),
+              transparent 28%
+            ),
+            linear-gradient(
+              135deg,
+              rgba(28,91,59,.58),
+              rgba(12,34,25,.96) 42%,
+              rgba(12,25,20,.98)
+            );
+        }
 
-      <div className="grid gap-5 lg:grid-cols-2">
+        .mwops-settings-page .settings-green-panel::before {
+          content: "";
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          background:
+            linear-gradient(
+              90deg,
+              transparent 0%,
+              rgba(255,255,255,.018) 50%,
+              transparent 100%
+            ),
+            linear-gradient(
+              rgba(255,255,255,.016) 1px,
+              transparent 1px
+            ),
+            linear-gradient(
+              90deg,
+              rgba(255,255,255,.016) 1px,
+              transparent 1px
+            );
+          background-size: 100% 100%, 48px 48px, 48px 48px;
+          mask-image: linear-gradient(
+            to bottom,
+            rgba(0,0,0,.9),
+            rgba(0,0,0,.55)
+          );
+        }
 
-        <div className="rounded-2xl border border-[#252d2a] bg-[#0b0f0d] p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#f2b632]/10 text-[#f2b632]">
-              <Settings
-                size={20}
-              />
-            </div>
+        .mwops-settings-page .settings-panel-line {
+          border-color: rgba(170,255,205,.11);
+          background: rgba(8,20,15,.24);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.025),
+            0 18px 50px rgba(0,0,0,.10);
+        }
 
+        .mwops-settings-page .settings-placement-grid {
+          display: grid;
+          grid-template-columns: repeat(8, minmax(0, 1fr));
+          gap: 9px;
+        }
+
+        @media (max-width: 1100px) {
+          .mwops-settings-page .settings-placement-grid {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+          }
+        }
+
+        @media (max-width: 620px) {
+          .mwops-settings-page .settings-placement-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+        }
+      `}</style>
+
+      <div className="relative overflow-hidden border-b border-[#252c29] bg-[#0b0f0e]">
+        <div className="settings-grid-bg pointer-events-none absolute inset-0" />
+
+        <div className="relative px-6 py-8 lg:px-10 lg:py-9">
+          <div className="flex flex-col justify-between gap-7 xl:flex-row xl:items-start">
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#f2b632]">
-                General
-              </p>
+              <div className="flex items-center gap-3">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#ff6417] shadow-[0_0_16px_rgba(255,100,23,.65)]" />
+                <span className="text-[11px] font-black uppercase tracking-[.18em] text-[#ff6417]">
+                  Tournament Control
+                </span>
+              </div>
 
-              <h2 className="mt-1 text-sm font-extrabold text-white">
-                Tournament Information
-              </h2>
+              <h1 className="settings-display mt-5 max-w-5xl text-4xl uppercase leading-[.92] text-[#f5f4ef] sm:text-5xl xl:text-6xl">
+                {tournament?.name || "TOURNAMENT"}
+              </h1>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <StatusBadge status={tournamentStatus} />
+
+                <span className="flex items-center gap-2 text-xs font-bold text-[#68736e]">
+                  <Gamepad2 size={14} />
+                  {tournament?.game || "BGMI"}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#303936] bg-[#171c1a] text-[#8c9691]">
+                <Settings size={18} />
+              </div>
             </div>
           </div>
 
-          <div className="mt-7 space-y-4">
-            <SettingRow
-              label="Tournament Name"
-              value={
-                tournament.name
-              }
-            />
-
-            <SettingRow
-              label="Game"
-              value={
-                tournament.game ||
-                "—"
-              }
-            />
-
-            <SettingRow
-              label="Status"
-              value={
-                <StatusBadge
-                  status={
-                    tournament.status
-                  }
-                />
-              }
-            />
-
-            <SettingRow
-              label="Tournament ID"
-              value={
-                tournament.id ||
-                "—"
-              }
-            />
-
-            <SettingRow
-              label="Competition Data"
-              value={
-                `${teamsCount} teams • ${roundsCount} rounds • ${matchesCount} matches`
-              }
-            />
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-[#252d2a] bg-[#0b0f0d] p-6">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e7ad2e]/10 text-[#e7ad2e]">
-              <Shield
-                size={20}
-              />
-            </div>
-
-            <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.15em] text-[#e7ad2e]">
-                Operations
-              </p>
-
-              <h2 className="mt-1 text-sm font-extrabold text-white">
-                Control Configuration
-              </h2>
-            </div>
-          </div>
-
-          <div className="mt-7 space-y-3">
-            <OperationRow
+          <div className="mt-9 grid gap-4 lg:grid-cols-3">
+            <SettingsStatCard
               icon={Layers3}
-              title="Rounds"
-              description="Tournament round structure"
+              value={roundsCount}
+              label="Active Rounds"
+              badge={`of ${roundsCount || 0} total`}
+              accent="cyan"
             />
 
-            <OperationRow
-              icon={Trophy}
-              title="Scoring"
-              description="Points and match result configuration"
+            <SettingsStatCard
+              icon={Gamepad2}
+              value={matchesCount}
+              label="Total Matches"
+              badge={matchesCount ? "Scheduled" : "No matches"}
+              accent="orange"
             />
 
-            <OperationRow
-              icon={MonitorPlay}
-              title="Broadcast"
-              description="OBS and live production controls"
+            <SettingsStatCard
+              icon={Shield}
+              value={statusLabel}
+              label="Status"
+              badge="Current State"
+              accent="green"
             />
           </div>
         </div>
       </div>
+
+      <section className="relative px-6 py-8 lg:px-10 lg:py-10">
+        <div className="mb-7">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+              <Trophy size={21} />
+            </div>
+
+            <div>
+              <h2 className="settings-display text-2xl uppercase text-white sm:text-3xl">
+                Points System
+              </h2>
+
+              <p className="mt-1 text-xs font-medium text-[#74807a]">
+                Define the scoring rules. These automatically apply to live
+                matches and overlays.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="settings-green-panel rounded-[15px] border border-emerald-300/10 p-5 shadow-[0_28px_90px_rgba(0,0,0,.28)] sm:p-7 lg:p-8">
+          <div className="relative z-[1]">
+            <div className="settings-panel-line flex items-center justify-between gap-5 rounded-[12px] border px-4 py-4 sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#ff6417]">
+                  <span className="text-xl font-black">⊙</span>
+                </div>
+
+                <span className="text-sm font-extrabold text-[#f3f4ef]">
+                  Points Per Elimination
+                </span>
+              </div>
+
+              <div className="flex h-11 min-w-[68px] items-center justify-center rounded-lg bg-[#08140f] px-5 text-lg font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,.025)]">
+                1
+              </div>
+            </div>
+
+            <div className="mt-7">
+              <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[.13em] text-[#a8b4ad]">
+                    Placement Points
+                  </p>
+                  <p className="mt-1 text-[10px] text-[#6f7d75]">
+                    BGMI tournament placement scoring
+                  </p>
+                </div>
+
+                <span className="font-mono text-[9px] font-bold uppercase tracking-[.12em] text-[#6d7b73]">
+                  25 positions
+                </span>
+              </div>
+
+              <div className="settings-placement-grid mt-4">
+                {placementPoints.map((points, index) => (
+                  <PlacementPoint
+                    key={index}
+                    position={index + 1}
+                    points={points}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3 border-t border-emerald-200/[0.08] pt-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-[9px] font-black uppercase tracking-[.15em] text-[#7e8c84]">
+                  Configuration Summary
+                </p>
+                <p className="mt-1 text-xs text-[#637168]">
+                  {teamsCount} teams · {roundsCount} rounds · {matchesCount} matches
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-emerald-300/10 bg-[#07130e]/60 px-4 py-2.5 text-right">
+                <p className="text-[8px] font-black uppercase tracking-[.13em] text-[#627068]">
+                  Placement Pool
+                </p>
+                <p className="mt-0.5 text-sm font-black text-[#dfe9e2]">
+                  {totalConfiguredPlacementPoints} pts
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1838,9 +2104,7 @@ function OperationRow({
     <div className="flex items-center justify-between rounded-xl border border-[#252d2a] bg-[#070908] p-4 transition hover:border-[#e7ad2e]/25">
       <div className="flex items-center gap-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#e7ad2e]/5 text-[#e7ad2e]">
-          <Icon
-            size={17}
-          />
+          <Icon size={17} />
         </div>
 
         <div>
