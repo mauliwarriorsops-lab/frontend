@@ -58,6 +58,7 @@ import {
   Plus,
   Search,
   Trophy,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -66,6 +67,7 @@ import {
 
 import {
   createTournament,
+  deleteTournament,
   getTournaments,
 } from "../../api/tournaments";
 
@@ -89,8 +91,6 @@ const STATUS_OPTIONS = [
 |--------------------------------------------------------------------------
 |
 | BGMI is the only supported game.
-|
-| The previous multi-game selection has intentionally been removed.
 |--------------------------------------------------------------------------
 */
 
@@ -103,9 +103,6 @@ const BGMI_GAME = {
 /*
 |--------------------------------------------------------------------------
 | GAME VISUALS
-|--------------------------------------------------------------------------
-|
-| BGMI is the only tournament game supported by MWOPS.
 |--------------------------------------------------------------------------
 */
 
@@ -192,11 +189,6 @@ function StatusBadge({
 /*
 |--------------------------------------------------------------------------
 | GAME CARD
-|--------------------------------------------------------------------------
-|
-| Kept as a reusable visual component.
-|
-| Since BGMI is the only supported game, only one card is rendered.
 |--------------------------------------------------------------------------
 */
 
@@ -470,15 +462,6 @@ function CreateTournamentModal({
       if (!validateStep()) {
         return;
       }
-
-      /*
-       * Only send the fields required by the
-       * current tournament creation flow.
-       *
-       * BGMI is always enforced here.
-       *
-       * Description is intentionally NOT sent.
-       */
 
       await onCreate({
         name: name.trim(),
@@ -905,6 +888,8 @@ function CreateTournamentModal({
 function TournamentCard({
   tournament,
   onManage,
+  onDelete,
+  deleting,
 }) {
   const status = String(
     tournament.status || "UPCOMING"
@@ -966,20 +951,54 @@ function TournamentCard({
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={() =>
-            onManage(tournament)
-          }
-          disabled={!tournament.id}
-          className="mwops-manage"
-        >
-          <span>
-            Manage Tournament
-          </span>
+        {/* ACTIONS */}
 
-          <ChevronRight size={14} />
-        </button>
+        <div className="mt-10 grid grid-cols-[1fr_auto] gap-2">
+          {/* MANAGE */}
+
+          <button
+            type="button"
+            onClick={() =>
+              onManage(tournament)
+            }
+            disabled={
+              !tournament.id ||
+              deleting
+            }
+            className="mwops-manage !mt-0"
+          >
+            <span>
+              Manage Tournament
+            </span>
+
+            <ChevronRight size={14} />
+          </button>
+
+          {/* DELETE */}
+
+          <button
+            type="button"
+            onClick={() =>
+              onDelete(tournament)
+            }
+            disabled={
+              !tournament.id ||
+              deleting
+            }
+            title="Delete Tournament"
+            aria-label={`Delete ${
+              tournament.name ||
+              "tournament"
+            }`}
+            className="flex min-h-[39px] min-w-[45px] items-center justify-center rounded-[4px] border border-[#ff4655]/30 bg-[#ff4655]/[0.05] text-[#ff6572] transition hover:border-[#ff4655]/60 hover:bg-[#ff4655] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : (
+              <Trash2 size={15} />
+            )}
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -1012,6 +1031,9 @@ function Tournaments() {
 
   const [creating, setCreating] =
     useState(false);
+
+  const [deletingTournamentId, setDeletingTournamentId] =
+    useState(null);
 
   const [error, setError] =
     useState("");
@@ -1088,11 +1110,6 @@ function Tournaments() {
         setCreating(true);
         setError("");
 
-        /*
-         * The modal already guarantees BGMI
-         * and does not include description.
-         */
-
         const created =
           await createTournament(
             payload
@@ -1127,11 +1144,84 @@ function Tournaments() {
 
   /*
   |--------------------------------------------------------------------------
+  | DELETE TOURNAMENT
+  |--------------------------------------------------------------------------
+  |
+  | Uses the existing deleteTournament API.
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  const handleDeleteTournament =
+    async (tournament) => {
+      const id =
+        tournament?.id;
+
+      if (!id) {
+        setError(
+          "Tournament ID is missing. Cannot delete tournament."
+        );
+
+        return;
+      }
+
+      const tournamentName =
+        tournament?.name ||
+        "this tournament";
+
+      const confirmed =
+        window.confirm(
+          `Delete "${tournamentName}"? This will permanently delete the tournament. This cannot be undone.`
+        );
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        setDeletingTournamentId(
+          String(id)
+        );
+
+        setError("");
+
+        await deleteTournament(
+          id
+        );
+
+        setTournaments(
+          (current) =>
+            current.filter(
+              (item) =>
+                String(
+                  item?.id
+                ) !==
+                String(id)
+            )
+        );
+      } catch (err) {
+        console.error(
+          "Failed to delete tournament:",
+          err
+        );
+
+        setError(
+          err?.message ||
+            "Failed to delete tournament."
+        );
+      } finally {
+        setDeletingTournamentId(
+          null
+        );
+      }
+    };
+
+  /*
+  |--------------------------------------------------------------------------
   | MANAGE TOURNAMENT
   |--------------------------------------------------------------------------
   |
   | /tournaments/:tournamentId
-  |
   |--------------------------------------------------------------------------
   */
 
@@ -2286,6 +2376,15 @@ function Tournaments() {
                       }
                       onManage={
                         handleManageTournament
+                      }
+                      onDelete={
+                        handleDeleteTournament
+                      }
+                      deleting={
+                        deletingTournamentId ===
+                        String(
+                          tournament.id
+                        )
                       }
                     />
                   )

@@ -1436,91 +1436,114 @@ function RoundsPage({
 function TeamsPage({
   teams,
   loading,
+  onRefresh,
 }) {
   return (
     <div className="px-6 py-8 lg:px-10 lg:py-10">
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#e7ad2e]">
+            Tournament Roster
+          </p>
 
-      <div className="mb-8">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#e7ad2e]">
-          Tournament Roster
-        </p>
+          <h1 className="mwops-display mt-2 text-4xl text-white">
+            TEAMS
+          </h1>
 
-        <h1 className="mwops-display mt-2 text-4xl text-white">
-          TEAMS
-        </h1>
+          <p className="mt-2 text-sm text-[#69736e]">
+            Teams assigned to this tournament.
+          </p>
+        </div>
 
-        <p className="mt-2 text-sm text-[#69736e]">
-          Teams participating in this
-          tournament.
-        </p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 self-start rounded-lg border border-[#2b332f] px-4 py-3 text-xs font-bold text-[#7c8580] transition hover:border-[#e7ad2e]/40 hover:text-white disabled:opacity-50 md:self-auto"
+        >
+          <RefreshCw
+            size={14}
+            className={loading ? "animate-spin" : ""}
+          />
+          Refresh
+        </button>
       </div>
 
       {loading ? (
         <LoadingPanel />
-      ) : teams.length ===
-        0 ? (
+      ) : teams.length === 0 ? (
         <EmptyPanel
           icon={Users}
           title="NO TEAMS YET"
-          description="Teams will appear here when tournament team assignments are available."
+          description="No teams are currently assigned to this tournament."
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {teams.map(
-            (team) => (
+          {teams.map((team, index) => {
+            const teamName =
+              team?.name ||
+              team?.team_name ||
+              team?.team?.name ||
+              "Unnamed Team";
+
+            const teamTag =
+              team?.tag ||
+              team?.short_name ||
+              team?.team?.tag ||
+              team?.team?.short_name ||
+              "TEAM";
+
+            const logo =
+              team?.logo_url ||
+              team?.logo ||
+              team?.team?.logo_url ||
+              null;
+
+            const slot =
+              team?.slot_number ??
+              team?.slot ??
+              team?.team?.slot_number ??
+              null;
+
+            return (
               <div
-                key={
-                  team.id
-                }
-                className="rounded-2xl border border-[#252d2a] bg-[#0b0f0d] p-6 transition hover:border-[#e7ad2e]/30"
+                key={team?.id || team?.team_id || `${teamName}-${index}`}
+                className="group relative overflow-hidden rounded-2xl border border-[#252d2a] bg-[#0b0f0d] p-5 transition hover:border-[#e7ad2e]/30 hover:bg-[#0d1210]"
               >
-                <div className="flex items-center gap-4">
-                  <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl border border-[#2b332f] bg-[#070908] text-[#e7ad2e]">
-                    {team.logo_url ? (
+                <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 rounded-full bg-[#e7ad2e]/[0.035] blur-3xl" />
+
+                <div className="relative flex items-center gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#2b332f] bg-[#070908] text-[#e7ad2e]">
+                    {logo ? (
                       <img
-                        src={
-                          team.logo_url
-                        }
+                        src={logo}
                         alt=""
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <Users
-                        size={22}
-                      />
+                      <Users size={22} />
                     )}
                   </div>
 
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-extrabold text-white">
-                      {team.name ||
-                        team.team_name ||
-                        "Unnamed Team"}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-[#e7ad2e]">
+                      {slot !== null
+                        ? `SLOT ${String(slot).padStart(2, "0")}`
+                        : `TEAM ${String(index + 1).padStart(2, "0")}`}
+                    </p>
+
+                    <h3 className="mt-1 truncate text-sm font-extrabold text-white">
+                      {teamName}
                     </h3>
 
-                    <div className="mt-1 flex items-center gap-2 text-[10px] uppercase tracking-[0.12em] text-[#626c67]">
-                      <span>
-                        {team.short_name ||
-                          team.tag ||
-                          "TEAM"}
-                      </span>
-
-                      {(team.slot_number ??
-                        team.slot) !==
-                        undefined && (
-                        <>
-                          <span className="h-1 w-1 rounded-full bg-[#3f4844]" />
-                          <span>
-                            SLOT {team.slot_number ?? team.slot}
-                          </span>
-                        </>
-                      )}
-                    </div>
+                    <p className="mt-1 truncate text-[10px] font-bold uppercase tracking-[0.12em] text-[#626c67]">
+                      {teamTag}
+                    </p>
                   </div>
                 </div>
               </div>
-            )
-          )}
+            );
+          })}
         </div>
       )}
     </div>
@@ -1536,123 +1559,180 @@ function TeamsPage({
 function StandingsPage({
   standings,
   loading,
+  onRefresh,
 }) {
+  const rows = Array.isArray(standings) ? standings : [];
+
   return (
     <div className="px-6 py-8 lg:px-10 lg:py-10">
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#f2b632]">
+            Competition Ranking
+          </p>
 
-      <div className="mb-8">
-        <p className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-[#f2b632]">
-          Competition Ranking
-        </p>
+          <h1 className="mwops-display mt-2 text-4xl text-white">
+            STANDINGS
+          </h1>
 
-        <h1 className="mwops-display mt-2 text-4xl text-white">
-          STANDINGS
-        </h1>
+          <p className="mt-2 text-sm text-[#69736e]">
+            Tournament rankings and scoring.
+          </p>
+        </div>
 
-        <p className="mt-2 text-sm text-[#69736e]">
-          Tournament rankings and scoring.
-        </p>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="inline-flex items-center gap-2 self-start rounded-lg border border-[#2b332f] px-4 py-3 text-xs font-bold text-[#7c8580] transition hover:border-[#e7ad2e]/40 hover:text-white disabled:opacity-50 md:self-auto"
+        >
+          <RefreshCw
+            size={14}
+            className={loading ? "animate-spin" : ""}
+          />
+          Refresh
+        </button>
       </div>
 
       {loading ? (
         <LoadingPanel />
-      ) : standings.length ===
-        0 ? (
+      ) : rows.length === 0 ? (
         <EmptyPanel
           icon={Trophy}
           title="NO STANDINGS YET"
-          description="Standings will populate when tournament match results and scoring data are available."
+          description="Teams are loaded from the tournament roster. Standings will populate with zero scores until match results are recorded."
         />
       ) : (
         <div className="overflow-hidden rounded-2xl border border-[#252d2a] bg-[#0b0f0d]">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[700px]">
+            <table className="w-full min-w-[760px]">
               <thead>
                 <tr className="border-b border-[#252d2a] bg-[#080b0a]">
-                  <th className="px-6 py-4 text-left text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
-                    #
-                  </th>
-
-                  <th className="px-6 py-4 text-left text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
-                    Team
-                  </th>
-
-                  <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
-                    Matches
-                  </th>
-
-                  <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
-                    Wins
-                  </th>
-
-                  <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
-                    Kills
-                  </th>
-
-                  <th className="px-6 py-4 text-right text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a]">
-                    Points
-                  </th>
+                  {[
+                    "#",
+                    "Team",
+                    "Matches",
+                    "Wins",
+                    "Kills",
+                    "Placement",
+                    "Points",
+                  ].map((heading, index) => (
+                    <th
+                      key={heading}
+                      className={`px-6 py-4 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[#65706a] ${
+                        index === 0 ? "text-left" : "text-right"
+                      } ${index === 1 ? "text-left" : ""}`}
+                    >
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
               </thead>
 
               <tbody>
-                {standings.map(
-                  (
-                    row,
-                    index
-                  ) => (
+                {rows.map((row, index) => {
+                  const team =
+                    row?.team ||
+                    row?.teams ||
+                    null;
+
+                  const teamName =
+                    team?.name ||
+                    team?.short_name ||
+                    row?.team_name ||
+                    row?.name ||
+                    "Unknown Team";
+
+                  const teamTag =
+                    team?.tag ||
+                    team?.short_name ||
+                    row?.team_tag ||
+                    row?.tag ||
+                    "";
+
+                  const matchesPlayed =
+                    row?.matches_played ??
+                    row?.matches ??
+                    row?.match_count ??
+                    row?.played ??
+                    0;
+
+                  const wins =
+                    row?.wins ??
+                    row?.win_count ??
+                    row?.victories ??
+                    0;
+
+                  const kills =
+                    row?.total_kills ??
+                    row?.kills ??
+                    row?.kill_count ??
+                    row?.eliminations ??
+                    0;
+
+                  const placement =
+                    row?.total_placement_points ??
+                    row?.placement_points ??
+                    row?.placementPoints ??
+                    0;
+
+                  const points =
+                    row?.total_points ??
+                    row?.points ??
+                    row?.score ??
+                    0;
+
+                  return (
                     <tr
                       key={
-                        row.id ||
-                        row.team_id ||
-                        index
+                        row?.id ||
+                        row?.team_id ||
+                        team?.id ||
+                        `${teamName}-${index}`
                       }
-                      className="border-b border-[#181e1b] last:border-0"
+                      className="border-b border-[#181e1b] last:border-0 transition hover:bg-white/[0.015]"
                     >
                       <td className="px-6 py-5 font-mono text-sm text-[#f2b632]">
                         {String(
-                          index + 1
-                        ).padStart(
-                          2,
-                          "0"
+                          row?.rank ??
+                            row?.position ??
+                            index + 1
+                        ).padStart(2, "0")}
+                      </td>
+
+                      <td className="px-6 py-5">
+                        <div className="font-extrabold text-white">
+                          {teamName}
+                        </div>
+                        {teamTag && (
+                          <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.12em] text-[#59635e]">
+                            {teamTag}
+                          </div>
                         )}
                       </td>
 
-                      <td className="px-6 py-5 text-sm font-extrabold text-white">
-                        {row.team?.name ||
-                          row.team_name ||
-                          row.name ||
-                          "Unknown Team"}
+                      <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
+                        {matchesPlayed}
                       </td>
 
                       <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
-                        {row.matches ??
-                          row.matches_played ??
-                          row.match_count ??
-                          0}
+                        {wins}
                       </td>
 
                       <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
-                        {row.wins ??
-                          0}
+                        {kills}
                       </td>
 
                       <td className="px-6 py-5 text-right text-sm text-[#8b9590]">
-                        {row.kills ??
-                          row.total_kills ??
-                          row.eliminations ??
-                          0}
+                        {placement}
                       </td>
 
                       <td className="px-6 py-5 text-right text-sm font-extrabold text-[#f2b632]">
-                        {row.total_points ??
-                          row.points ??
-                          row.score ??
-                          0}
+                        {points}
                       </td>
                     </tr>
-                  )
-                )}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -2722,7 +2802,7 @@ function TournamentDetail() {
 
   const loadTournament =
     useCallback(
-      async () => {
+      async (teamOverride = null) => {
         if (!tournamentId) {
           setError(
             "Tournament ID is missing."
@@ -2907,29 +2987,17 @@ function TournamentDetail() {
       async () => {
         if (!tournamentId) {
           setTeams([]);
-          return;
+          return [];
         }
 
         try {
           setTeamsLoading(true);
 
-          /*
-          |--------------------------------------------------------------------
-          | REAL MWOPS TEAM DATA
-          |--------------------------------------------------------------------
-          |
-          | The existing MWOPS frontend uses GET /teams for the team registry.
-          | The backend team records contain tournament_id, so we filter the
-          | registry here for this tournament.
-          |
-          | Do NOT import a frontend service here. This page already has its own
-          | request helper and therefore has no dependency on a missing service
-          | file.
-          |--------------------------------------------------------------------
-          */
-
-          const data =
-            await request('/teams');
+          // No team.service.js exists in the current frontend repository.
+          // Use the existing HTTP helper and the real /teams endpoint.
+          const data = await request(
+            `/teams?_mwops_ts=${Date.now()}`
+          );
 
           const raw =
             data?.teams ??
@@ -2945,66 +3013,66 @@ function TournamentDetail() {
                   ? raw.data
                   : [];
 
-          const tournamentTeams =
-            list
-              .filter(Boolean)
-              .filter((team) => {
-                const teamTournamentId =
-                  team?.tournament_id ??
-                  team?.tournamentId ??
-                  team?.tournament?.id;
+          const normalizedTeams = list
+            .filter(Boolean)
+            .filter((team) => {
+              const ownerId =
+                team?.tournament_id ??
+                team?.tournamentId ??
+                team?.tournament?.id;
 
-                if (!teamTournamentId) {
-                  return false;
-                }
+              return (
+                ownerId &&
+                String(ownerId) === String(tournamentId)
+              );
+            })
+            .map((team) => ({
+              ...team,
+              id: team?.id ?? team?.team_id,
+              name:
+                team?.name ??
+                team?.team_name ??
+                team?.team?.name ??
+                'Unnamed Team',
+              tag:
+                team?.tag ??
+                team?.short_name ??
+                team?.team?.tag ??
+                team?.team?.short_name ??
+                '',
+              logo_url:
+                team?.logo_url ??
+                team?.logo ??
+                team?.team?.logo_url ??
+                null,
+              slot_number:
+                team?.slot_number ??
+                team?.slot ??
+                team?.team?.slot_number ??
+                null,
+            }))
+            .filter((team) => team.id)
+            .sort((a, b) => {
+              const slotA = Number(a?.slot_number || 0);
+              const slotB = Number(b?.slot_number || 0);
 
-                return (
-                  String(teamTournamentId) ===
-                  String(tournamentId)
-                );
-              })
-              .sort((a, b) => {
-                const slotA =
-                  Number(
-                    a?.slot_number ??
-                    a?.slot ??
-                    0
-                  );
+              if (slotA > 0 && slotB > 0 && slotA !== slotB) {
+                return slotA - slotB;
+              }
+              if (slotA > 0 && slotB === 0) return -1;
+              if (slotA === 0 && slotB > 0) return 1;
 
-                const slotB =
-                  Number(
-                    b?.slot_number ??
-                    b?.slot ??
-                    0
-                  );
+              return String(a?.name || '').localeCompare(
+                String(b?.name || '')
+              );
+            });
 
-                if (slotA !== slotB) {
-                  if (slotA === 0) return 1;
-                  if (slotB === 0) return -1;
-                  return slotA - slotB;
-                }
-
-                return String(
-                  a?.name ||
-                    a?.short_name ||
-                    ''
-                ).localeCompare(
-                  String(
-                    b?.name ||
-                      b?.short_name ||
-                      ''
-                  )
-                );
-              });
-
-          setTeams(tournamentTeams);
+          setTeams(normalizedTeams);
+          return normalizedTeams;
         } catch (err) {
-          console.error(
-            'Failed to load tournament teams:',
-            err
-          );
-
+          console.error('Failed to load tournament teams:', err);
           setTeams([]);
+          return [];
         } finally {
           setTeamsLoading(false);
         }
@@ -3020,34 +3088,25 @@ function TournamentDetail() {
 
   const loadStandings =
     useCallback(
-      async () => {
+      async (teamOverride = null) => {
         if (!tournamentId) {
           setStandings([]);
-          return;
+          return [];
         }
 
         try {
           setStandingsLoading(true);
 
-          /*
-          |--------------------------------------------------------------------
-          | OFFICIAL MWOPS STANDINGS ENDPOINT
-          |--------------------------------------------------------------------
-          |
-          | The current backend contract is:
-          |
-          | GET /api/standings?tournamentId=<uuid>
-          |
-          | Standings are calculated from tournament matches/results.
-          |--------------------------------------------------------------------
-          */
+          const teamList = Array.isArray(teamOverride)
+            ? teamOverride
+            : teams;
 
-          const data =
-            await request(
-              `/standings?tournamentId=${encodeURIComponent(
-                tournamentId
-              )}`
-            );
+          // The current backend standings contract is:
+          // GET /api/standings?tournamentId=<uuid>
+          // Keep this file self-contained; standings.service.js is not present.
+          const data = await request(
+            `/standings?tournamentId=${encodeURIComponent(tournamentId)}&_mwops_ts=${Date.now()}`
+          );
 
           const raw =
             data?.standings ??
@@ -3066,29 +3125,132 @@ function TournamentDetail() {
                     ? raw.data
                     : [];
 
-          setStandings(
-            list
+          const byTeam = new Map();
+
+          list.filter(Boolean).forEach((row) => {
+            const teamId =
+              row?.team_id ??
+              row?.teamId ??
+              row?.team?.id ??
+              row?.teams?.id;
+
+            if (teamId) {
+              byTeam.set(String(teamId), row);
+            }
+          });
+
+          const merged = teamList.map((team, index) => {
+            const teamId = team?.id ?? team?.team_id;
+            const existing = teamId
+              ? byTeam.get(String(teamId))
+              : null;
+
+            if (existing) {
+              return {
+                ...existing,
+                team: existing?.team || existing?.teams || team,
+                team_id: existing?.team_id || teamId,
+                rank: existing?.rank ?? existing?.position ?? index + 1,
+              };
+            }
+
+            return {
+              id: `team-standing-${String(teamId || index)}`,
+              tournament_id: tournamentId,
+              team_id: teamId,
+              team,
+              team_name: team?.name || 'Unknown Team',
+              short_name: team?.tag || team?.short_name || '',
+              logo_url: team?.logo_url || null,
+              matches_played: 0,
+              matches: 0,
+              wins: 0,
+              losses: 0,
+              draws: 0,
+              kills: 0,
+              total_kills: 0,
+              placement_points: 0,
+              total_placement_points: 0,
+              kill_points: 0,
+              total_points: 0,
+              points: 0,
+              rank: index + 1,
+            };
+          });
+
+          const rosterIds = new Set(
+            teamList
+              .map((team) => team?.id ?? team?.team_id)
               .filter(Boolean)
-              .map((row, index) => ({
-                ...row,
-                rank:
-                  row?.rank ??
-                  row?.position ??
-                  index + 1,
-              }))
-          );
-        } catch (err) {
-          console.error(
-            'Failed to load tournament standings:',
-            err
+              .map(String)
           );
 
-          setStandings([]);
+          list.filter(Boolean).forEach((row) => {
+            const teamId =
+              row?.team_id ??
+              row?.teamId ??
+              row?.team?.id ??
+              row?.teams?.id;
+
+            if (teamId && !rosterIds.has(String(teamId))) {
+              merged.push(row);
+            }
+          });
+
+          merged.sort((a, b) => {
+            const pointsA = Number(a?.total_points ?? a?.points ?? 0);
+            const pointsB = Number(b?.total_points ?? b?.points ?? 0);
+            if (pointsB !== pointsA) return pointsB - pointsA;
+
+            const killsA = Number(a?.kills ?? a?.total_kills ?? 0);
+            const killsB = Number(b?.kills ?? b?.total_kills ?? 0);
+            if (killsB !== killsA) return killsB - killsA;
+
+            return String(a?.team_name || a?.team?.name || '').localeCompare(
+              String(b?.team_name || b?.team?.name || '')
+            );
+          });
+
+          const ranked = merged.map((row, index) => ({
+            ...row,
+            rank: index + 1,
+          }));
+
+          setStandings(ranked);
+          return ranked;
+        } catch (err) {
+          console.error('Failed to load tournament standings:', err);
+
+          // Never turn a valid tournament roster into an empty standings page.
+          const fallback = teamList.map((team, index) => ({
+            id: `team-standing-${String(team?.id || index)}`,
+            tournament_id: tournamentId,
+            team_id: team?.id ?? team?.team_id,
+            team,
+            team_name: team?.name || 'Unknown Team',
+            short_name: team?.tag || team?.short_name || '',
+            logo_url: team?.logo_url || null,
+            matches_played: 0,
+            matches: 0,
+            wins: 0,
+            losses: 0,
+            draws: 0,
+            kills: 0,
+            total_kills: 0,
+            placement_points: 0,
+            kill_points: 0,
+            total_points: 0,
+            points: 0,
+            rank: index + 1,
+          }));
+
+          setStandings(fallback);
+          return fallback;
         } finally {
           setStandingsLoading(false);
         }
       },
-      [tournamentId]
+      [tournamentId, teams]
     );
 
   /*
@@ -3104,9 +3266,19 @@ function TournamentDetail() {
           loadTournament(),
           loadRounds(),
           loadMatches(),
-          loadTeams(),
-          loadStandings(),
         ]);
+
+        /*
+         * Standings depend on the tournament roster, so load teams
+         * first. This removes the race that could produce an empty
+         * standings state on the first render.
+         */
+        const loadedTeams =
+          await loadTeams();
+
+        await loadStandings(
+          loadedTeams
+        );
       },
       [
         loadTournament,
@@ -3125,8 +3297,11 @@ function TournamentDetail() {
 
   useEffect(() => {
     loadAll();
+    // The tournament ID is the intended lifecycle boundary for the
+    // initial tournament workspace load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    loadAll,
+    tournamentId,
   ]);
 
   /*
@@ -4891,6 +5066,9 @@ function TournamentDetail() {
             loading={
               teamsLoading
             }
+            onRefresh={
+              loadTeams
+            }
           />
         )}
 
@@ -4902,6 +5080,12 @@ function TournamentDetail() {
             }
             loading={
               standingsLoading
+            }
+            onRefresh={
+              async () => {
+                await loadTeams();
+                await loadStandings();
+              }
             }
           />
         )}

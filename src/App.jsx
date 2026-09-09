@@ -11,6 +11,7 @@
 |    - Dashboard
 |    - Tournaments
 |    - Matches
+|    - Teams
 |    - Control Room
 |    - OBS
 |    - Analytics
@@ -96,6 +97,7 @@ import {
 import Dashboard from "./pages/Dashboard/Dashboard";
 import Tournaments from "./pages/Tournaments/Tournaments";
 import Matches from "./pages/Matches/Matches";
+import Teams from "./pages/Teams/Teams.jsx";
 import ControlRoom from "./pages/ControlRoom/ControlRoom";
 
 /*
@@ -413,6 +415,25 @@ function ApplicationRoutes() {
       <Route
         path="/matches"
         element={<Matches />}
+      />
+
+      {/* ================================================================
+          TEAMS
+          ================================================================ */}
+      {/*
+          IMPORTANT:
+          Dashboard -> Manage Teams uses /teams.
+
+          This route was missing from the previous App.jsx.
+          Without it, React Router reaches the wildcard route below
+          and redirects back to /dashboard.
+
+          Keep this route BEFORE the wildcard route.
+      */}
+
+      <Route
+        path="/teams"
+        element={<Teams />}
       />
 
       {/* ================================================================
