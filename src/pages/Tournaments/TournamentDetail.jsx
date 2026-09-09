@@ -59,8 +59,6 @@ import {
   useParams,
 } from "react-router-dom";
 
-import { teamService } from "../../services/team.service.js";
-
 /*
 |--------------------------------------------------------------------------
 | API CONFIGURATION
@@ -145,7 +143,9 @@ async function request(
   if (!response.ok) {
     throw new Error(
       payload?.message ||
+        payload?.error?.message ||
         payload?.error ||
+        payload?.data?.message ||
         `Request failed with status ${response.status}`
     );
   }
@@ -620,6 +620,9 @@ function RoundCard({
   onDeleteMatch,
   deletingRoundId,
   deletingMatchId,
+  onSettings,
+  onShare,
+  onDownload,
 }) {
   const state = getRoundState(round.matches);
   const matchCount = round.matches.length;
@@ -1035,9 +1038,9 @@ function RoundsPage({
   onDeleteMatch,
   deletingRoundId,
   deletingMatchId,
-  handleSettingsAction,
-  handleShareAction,
-  handleDownloadAction,
+  onSettings,
+  onShare,
+  onDownload,
 }) {
   const roundsWithMatches =
     useMemo(() => {
@@ -1220,7 +1223,7 @@ function RoundsPage({
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Tournament Settings"
                 aria-label="Open Tournament Settings"
-                onClick={handleSettingsAction}
+                onClick={onSettings}
               >
                 <Settings size={19} />
               </button>
@@ -1230,7 +1233,7 @@ function RoundsPage({
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Share Tournament"
                 aria-label="Share Tournament"
-                onClick={handleShareAction}
+                onClick={onShare}
               >
                 <Share2 size={18} />
               </button>
@@ -1240,7 +1243,7 @@ function RoundsPage({
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Export Tournament"
                 aria-label="Export Tournament"
-                onClick={handleDownloadAction}
+                onClick={onDownload}
               >
                 <Download size={18} />
               </button>
@@ -1403,6 +1406,15 @@ function RoundsPage({
                   }
                   deletingMatchId={
                     deletingMatchId
+                  }
+                  onSettings={
+                    onSettings
+                  }
+                  onShare={
+                    onShare
+                  }
+                  onDownload={
+                    onDownload
                   }
                 />
               )
@@ -1704,7 +1716,7 @@ function SettingsPage({
             <SettingRow
               label="Tournament Name"
               value={
-                tournament?.name || "—"
+                tournament.name
               }
             />
 
@@ -2246,21 +2258,27 @@ function TournamentDetail() {
           setTeamsLoading(true);
 
           /*
-          |--------------------------------------------------------------------------
-          | Use the same team service used by the working Teams page.
-          | It already knows how to load teams for a tournament.
-          |--------------------------------------------------------------------------
+          |--------------------------------------------------------------------
+          | REAL MWOPS TEAM DATA
+          |--------------------------------------------------------------------
+          |
+          | The existing MWOPS frontend uses GET /teams for the team registry.
+          | The backend team records contain tournament_id, so we filter the
+          | registry here for this tournament.
+          |
+          | Do NOT import a frontend service here. This page already has its own
+          | request helper and therefore has no dependency on a missing service
+          | file.
+          |--------------------------------------------------------------------
           */
 
-          const response =
-            await teamService.list(
-              tournamentId
-            );
+          const data =
+            await request('/teams');
 
           const raw =
-            response?.teams ??
-            response?.data ??
-            response;
+            data?.teams ??
+            data?.data ??
+            data;
 
           const list =
             Array.isArray(raw)
@@ -2271,9 +2289,24 @@ function TournamentDetail() {
                   ? raw.data
                   : [];
 
-          setTeams(
+          const tournamentTeams =
             list
               .filter(Boolean)
+              .filter((team) => {
+                const teamTournamentId =
+                  team?.tournament_id ??
+                  team?.tournamentId ??
+                  team?.tournament?.id;
+
+                if (!teamTournamentId) {
+                  return false;
+                }
+
+                return (
+                  String(teamTournamentId) ===
+                  String(tournamentId)
+                );
+              })
               .sort((a, b) => {
                 const slotA =
                   Number(
@@ -2289,11 +2322,9 @@ function TournamentDetail() {
                     0
                   );
 
-                if (
-                  slotA > 0 &&
-                  slotB > 0 &&
-                  slotA !== slotB
-                ) {
+                if (slotA !== slotB) {
+                  if (slotA === 0) return 1;
+                  if (slotB === 0) return -1;
                   return slotA - slotB;
                 }
 
@@ -2308,25 +2339,21 @@ function TournamentDetail() {
                       ''
                   )
                 );
-              })
-          );
+              });
+
+          setTeams(tournamentTeams);
         } catch (err) {
           console.error(
-            "Failed to load tournament teams:",
+            'Failed to load tournament teams:',
             err
           );
 
-          /*
-           * Teams must not crash the entire tournament control page.
-           */
           setTeams([]);
         } finally {
           setTeamsLoading(false);
         }
       },
-      [
-        tournamentId,
-      ]
+      [tournamentId]
     );
 
   /*
@@ -2347,32 +2374,24 @@ function TournamentDetail() {
           setStandingsLoading(true);
 
           /*
-          |--------------------------------------------------------------------------
-          | The backend standings service expects `tournamentId` (camelCase).
-          | The previous version sent `tournament_id`, which produced a 404.
-          |--------------------------------------------------------------------------
+          |--------------------------------------------------------------------
+          | OFFICIAL MWOPS STANDINGS ENDPOINT
+          |--------------------------------------------------------------------
+          |
+          | The current backend contract is:
+          |
+          | GET /api/standings?tournamentId=<uuid>
+          |
+          | Standings are calculated from tournament matches/results.
+          |--------------------------------------------------------------------
           */
 
-          let data;
-
-          try {
-            data =
-              await request(
-                `/standings?tournamentId=${encodeURIComponent(
-                  tournamentId
-                )}`
-              );
-          } catch (primaryError) {
-            /*
-             * Compatibility fallback for the dedicated leaderboard route.
-             */
-            data =
-              await request(
-                `/standings/leaderboard?tournamentId=${encodeURIComponent(
-                  tournamentId
-                )}`
-              );
-          }
+          const data =
+            await request(
+              `/standings?tournamentId=${encodeURIComponent(
+                tournamentId
+              )}`
+            );
 
           const raw =
             data?.standings ??
@@ -2404,7 +2423,7 @@ function TournamentDetail() {
           );
         } catch (err) {
           console.error(
-            "Failed to load tournament standings:",
+            'Failed to load tournament standings:',
             err
           );
 
@@ -2413,9 +2432,7 @@ function TournamentDetail() {
           setStandingsLoading(false);
         }
       },
-      [
-        tournamentId,
-      ]
+      [tournamentId]
     );
 
   /*
@@ -4098,13 +4115,13 @@ function TournamentDetail() {
             deletingMatchId={
               deletingMatchId
             }
-            handleSettingsAction={
+            onSettings={
               handleOpenSettings
             }
-            handleShareAction={
+            onShare={
               handleShareTournament
             }
-            handleDownloadAction={
+            onDownload={
               handleDownloadTournament
             }
           />
