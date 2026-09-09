@@ -5,6 +5,12 @@
 |
 | Tournament listing + tournament creation.
 |
+| TOURNAMENT CREATION RULES
+|--------------------------------------------------------------------------
+|
+| - BGMI is the only supported game.
+| - Tournament description has been removed.
+|
 | CURRENT SUPABASE TOURNAMENT SCHEMA
 |--------------------------------------------------------------------------
 |
@@ -33,6 +39,8 @@
 | - scoring_config
 | - start_date
 | - end_date
+|
+| Description is also no longer collected or sent from this page.
 |
 |--------------------------------------------------------------------------
 */
@@ -77,61 +85,36 @@ const STATUS_OPTIONS = [
 
 /*
 |--------------------------------------------------------------------------
-| GAME OPTIONS
+| GAME
+|--------------------------------------------------------------------------
+|
+| BGMI is the only supported game.
+|
+| The previous multi-game selection has intentionally been removed.
 |--------------------------------------------------------------------------
 */
 
-const GAME_OPTIONS = [
-  {
-    id: "PUBG Mobile",
-    name: "PUBG Mobile",
-    description: "Battle Royale",
-  },
-  {
-    id: "BGMI",
-    name: "BGMI",
-    description: "Battle Royale",
-  },
-  {
-    id: "Free Fire",
-    name: "Free Fire",
-    description: "Battle Royale",
-  },
-  {
-    id: "Valorant",
-    name: "Valorant",
-    description: "Tactical FPS",
-  },
-  {
-    id: "Call of Duty Mobile",
-    name: "Call of Duty Mobile",
-    description: "Competitive FPS",
-  },
-];
+const BGMI_GAME = {
+  id: "BGMI",
+  name: "BGMI",
+  description: "Battle Royale",
+};
 
 /*
 |--------------------------------------------------------------------------
-| TOURNAMENT VISUALS
+| GAME VISUALS
 |--------------------------------------------------------------------------
 |
-| These are presentation-only assets. They are not sent to Supabase.
-| A fallback image is used when a tournament game is not recognized.
+| BGMI is the only tournament game supported by MWOPS.
 |--------------------------------------------------------------------------
 */
 
 const GAME_VISUALS = {
-  "PUBG Mobile":
-    "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1400&q=85",
   BGMI:
     "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1400&q=85",
-  "Free Fire":
-    "https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=1400&q=85",
-  Valorant:
-    "https://images.unsplash.com/photo-1560419015-7c427e8ae5ba?auto=format&fit=crop&w=1400&q=85",
-  "Call of Duty Mobile":
-    "https://images.unsplash.com/photo-1593305841991-05c297ba4575?auto=format&fit=crop&w=1400&q=85",
+
   DEFAULT:
-    "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1400&q=85",
+    "https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=1400&q=85",
 };
 
 function getTournamentVisual(game) {
@@ -210,6 +193,11 @@ function StatusBadge({
 |--------------------------------------------------------------------------
 | GAME CARD
 |--------------------------------------------------------------------------
+|
+| Kept as a reusable visual component.
+|
+| Since BGMI is the only supported game, only one card is rendered.
+|--------------------------------------------------------------------------
 */
 
 function GameCard({
@@ -223,7 +211,7 @@ function GameCard({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`group relative rounded-xl border p-4 text-left transition ${
+      className={`group relative w-full max-w-sm rounded-xl border p-4 text-left transition ${
         selected
           ? "border-[#f2b632] bg-[#f2b632]/10"
           : "border-[#252a2e] bg-[#050607] hover:border-[#555b60] hover:bg-[#0d0f11]"
@@ -387,11 +375,13 @@ function CreateTournamentModal({
   const [name, setName] =
     useState("");
 
-  const [game, setGame] =
-    useState("PUBG Mobile");
+  /*
+  |--------------------------------------------------------------------------
+  | BGMI ONLY
+  |--------------------------------------------------------------------------
+  */
 
-  const [description, setDescription] =
-    useState("");
+  const game = BGMI_GAME.id;
 
   const [status, setStatus] =
     useState("upcoming");
@@ -416,25 +406,9 @@ function CreateTournamentModal({
 
         return false;
       }
-
-      if (!game) {
-        setLocalError(
-          "Please select a game."
-        );
-
-        return false;
-      }
     }
 
     if (step === 2) {
-      if (!description.trim()) {
-        setLocalError(
-          "Please add a tournament description."
-        );
-
-        return false;
-      }
-
       if (!status) {
         setLocalError(
           "Please select a tournament status."
@@ -497,12 +471,19 @@ function CreateTournamentModal({
         return;
       }
 
+      /*
+       * Only send the fields required by the
+       * current tournament creation flow.
+       *
+       * BGMI is always enforced here.
+       *
+       * Description is intentionally NOT sent.
+       */
+
       await onCreate({
         name: name.trim(),
-        game: game.trim(),
+        game: "BGMI",
         status,
-        description:
-          description.trim(),
       });
     };
 
@@ -557,8 +538,8 @@ function CreateTournamentModal({
                 </h3>
 
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[#6f7479]">
-                  Set the basic identity and
-                  game for your competition.
+                  Set the basic identity for
+                  your BGMI competition.
                 </p>
               </div>
 
@@ -587,35 +568,20 @@ function CreateTournamentModal({
 
               <div>
                 <label className="mb-3 block text-xs font-bold uppercase tracking-[0.12em] text-[#92979d]">
-                  Select Game
+                  Game
                 </label>
 
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                  {GAME_OPTIONS.map(
-                    (gameOption) => (
-                      <GameCard
-                        key={
-                          gameOption.id
-                        }
-                        game={
-                          gameOption
-                        }
-                        selected={
-                          game ===
-                          gameOption.id
-                        }
-                        disabled={
-                          creating
-                        }
-                        onClick={() =>
-                          setGame(
-                            gameOption.id
-                          )
-                        }
-                      />
-                    )
-                  )}
-                </div>
+                <GameCard
+                  game={BGMI_GAME}
+                  selected
+                  disabled={creating}
+                  onClick={() => {}}
+                />
+
+                <p className="mt-3 text-[10px] uppercase tracking-[0.12em] text-[#555d62]">
+                  MWOPS currently supports BGMI
+                  competitions only.
+                </p>
               </div>
             </div>
           )}
@@ -634,30 +600,9 @@ function CreateTournamentModal({
                 </h3>
 
                 <p className="mt-2 max-w-xl text-sm leading-6 text-[#6f7479]">
-                  Add the operational information
-                  for this competition.
+                  Set the initial operational
+                  status for this competition.
                 </p>
-              </div>
-
-              {/* DESCRIPTION */}
-
-              <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-[#92979d]">
-                  Tournament Description
-                </label>
-
-                <textarea
-                  value={description}
-                  onChange={(event) =>
-                    setDescription(
-                      event.target.value
-                    )
-                  }
-                  placeholder="Describe this tournament..."
-                  rows={6}
-                  disabled={creating}
-                  className="w-full resize-none rounded-xl border border-[#252a2e] bg-[#050607] px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-[#4f5458] focus:border-[#f2b632]"
-                />
               </div>
 
               {/* STATUS */}
@@ -815,7 +760,7 @@ function CreateTournamentModal({
                     </p>
 
                     <p className="mt-2 text-sm font-extrabold text-white">
-                      {game}
+                      BGMI
                     </p>
                   </div>
 
@@ -832,17 +777,6 @@ function CreateTournamentModal({
                       />
                     </div>
                   </div>
-                </div>
-
-                <div className="border-t border-[#252a2e] p-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#6f7479]">
-                    Description
-                  </p>
-
-                  <p className="mt-2 text-sm leading-6 text-[#92979d]">
-                    {description ||
-                      "No description provided."}
-                  </p>
                 </div>
               </div>
 
@@ -976,10 +910,13 @@ function TournamentCard({
     tournament.status || "UPCOMING"
   ).toUpperCase();
 
-  const statusClass = status.toLowerCase();
-  const image = getTournamentVisual(
-    tournament.game
-  );
+  const statusClass =
+    status.toLowerCase();
+
+  const image =
+    getTournamentVisual(
+      tournament.game
+    );
 
   return (
     <article className="mwops-card">
@@ -995,7 +932,8 @@ function TournamentCard({
 
         <div className="mwops-card-top">
           <div className="mwops-game">
-            {tournament.game || "Esports"}
+            {tournament.game ||
+              "BGMI"}
           </div>
 
           <div
@@ -1021,6 +959,7 @@ function TournamentCard({
           <strong>
             Tournament Workspace
           </strong>
+
           <span>
             Manage teams, rounds, matches,
             standings and tournament operations.
@@ -1035,7 +974,10 @@ function TournamentCard({
           disabled={!tournament.id}
           className="mwops-manage"
         >
-          <span>Manage Tournament</span>
+          <span>
+            Manage Tournament
+          </span>
+
           <ChevronRight size={14} />
         </button>
       </div>
@@ -1146,6 +1088,11 @@ function Tournaments() {
         setCreating(true);
         setError("");
 
+        /*
+         * The modal already guarantees BGMI
+         * and does not include description.
+         */
+
         const created =
           await createTournament(
             payload
@@ -1182,14 +1129,6 @@ function Tournaments() {
   |--------------------------------------------------------------------------
   | MANAGE TOURNAMENT
   |--------------------------------------------------------------------------
-  |
-  | This is the important change.
-  |
-  | Old:
-  |
-  | setSelectedTournament(...)
-  |
-  | New:
   |
   | /tournaments/:tournamentId
   |
@@ -1256,12 +1195,6 @@ function Tournaments() {
               .includes(search) ||
             String(
               tournament.game ||
-                ""
-            )
-              .toLowerCase()
-              .includes(search) ||
-            String(
-              tournament.description ||
                 ""
             )
               .toLowerCase()
@@ -2148,150 +2081,35 @@ function Tournaments() {
         }
       `}</style>
 
-    <main className="mwops-tournaments-page">
-      <div className="mwops-page-shell">
+      <main className="mwops-tournaments-page">
+        <div className="mwops-page-shell">
 
-        {/* HEADER */}
+          {/* HEADER */}
 
-        <div className="mwops-topline" />
+          <div className="mwops-topline" />
 
-        <header className="mwops-page-header">
-          <div className="mwops-header-inner">
-            <div className="mwops-brand-lockup">
-              <div className="mwops-brand-mark">M</div>
-              <div>
-                <div className="mwops-brand-name">MW<span>O</span>PS</div>
-                <div className="mwops-brand-sub">Match Warfare Operations</div>
+          <header className="mwops-page-header">
+            <div className="mwops-header-inner">
+
+              <div className="mwops-brand-lockup">
+                <div className="mwops-brand-mark">
+                  M
+                </div>
+
+                <div>
+                  <div className="mwops-brand-name">
+                    MW<span>O</span>PS
+                  </div>
+
+                  <div className="mwops-brand-sub">
+                    Match Warfare Operations
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="mwops-header-context">Competition Operations</div>
-
-            <button
-              type="button"
-              onClick={() => setShowCreateModal(true)}
-              className="mwops-create-button"
-            >
-              <Plus size={14} />
-              Create Tournament
-            </button>
-          </div>
-        </header>
-
-        {/* CONTENT */}
-
-        <div className="mwops-content">
-
-          {/* HERO */}
-
-          <section className="mwops-hero">
-            <div className="mwops-hero-copy">
-              <div className="mwops-kicker">Competition Management</div>
-              <h1 className="mwops-hero-title">
-                Your <span>Tournaments</span>
-              </h1>
-              <p>
-                Create, manage and monitor every competition running through the MWOPS esports operation.
-                Tournament workspaces keep teams, matches, rounds and live production organized in one place.
-              </p>
-            </div>
-
-            <div className="mwops-hero-meta">
-              <div className="mwops-hero-meta-label">Active Workspace</div>
-              <div className="mwops-hero-meta-value">
-                {String(tournaments.length).padStart(2, "0")} Events
+              <div className="mwops-header-context">
+                Competition Operations
               </div>
-              <div className="mwops-hero-meta-line" />
-            </div>
-          </section>
-
-          {/* ERROR */}
-
-          {error && (
-            <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-[#ff3b3b]/30 bg-[#ff3b3b]/10 px-4 py-3 text-sm text-[#ff7777]">
-              <span>
-                {error}
-              </span>
-
-              <button
-                type="button"
-                onClick={() =>
-                  setError("")
-                }
-                className="text-xs font-bold uppercase tracking-wider hover:text-white"
-              >
-                Dismiss
-              </button>
-            </div>
-          )}
-
-          {/* FILTERS */}
-
-          <section className="mwops-toolbar">
-            <div className="mwops-filters">
-              {STATUS_OPTIONS.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setActiveFilter(status)}
-                  className={`mwops-filter ${activeFilter === status ? "active" : ""}`}
-                >
-                  {status}
-                </button>
-              ))}
-            </div>
-
-            <label className="mwops-search">
-              <Search size={14} />
-              <input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search tournaments..."
-              />
-            </label>
-          </section>
-
-          <div className="mwops-section-head">
-            <div className="mwops-section-title-wrap">
-              <div className="mwops-section-marker" />
-              <h2 className="mwops-section-title">Competition Roster</h2>
-              <span className="mwops-count">
-                {visibleTournaments.length} shown
-              </span>
-            </div>
-          </div>
-
-          {/* TOURNAMENT GRID */}
-
-          {loading ? (
-            <section className="mwops-tournament-grid">
-              {[1, 2, 3].map(
-                (item) => (
-                  <div key={item} className="h-[292px] animate-pulse rounded-md border border-[#252a2e] bg-[#0b0d0f]" />
-                )
-              )}
-            </section>
-          ) : visibleTournaments.length >
-            0 ? (
-            <section className="mwops-tournament-grid">
-
-              {visibleTournaments.map(
-                (tournament) => (
-                  <TournamentCard
-                    key={
-                      tournament.id
-                    }
-                    tournament={
-                      tournament
-                    }
-                    onManage={
-                      handleManageTournament
-                    }
-                  />
-                )
-              )}
-
-              {/* CREATE CARD */}
 
               <button
                 type="button"
@@ -2300,94 +2118,279 @@ function Tournaments() {
                     true
                   )
                 }
-                className="mwops-create-card"
+                className="mwops-create-button"
               >
-                <div className="mwops-create-icon">
-                  <Plus size={26} />
-                </div>
-
-                <h3 className="mwops-create-title">
-                  Create Tournament
-                </h3>
-
-                <p className="mwops-create-copy">
-                  Set up a new competition
-                  and continue configuring
-                  it from the tournament
-                  workspace.
-                </p>
-              </button>
-            </section>
-          ) : (
-            <section className="mwops-empty">
-
-              <Trophy
-                size={38}
-                className="text-[#f2b632]"
-              />
-
-              <h3 className="mwops-display mt-5 text-3xl">
-                No Tournaments Found
-              </h3>
-
-              <p className="mt-2 text-sm text-[#6f7479]">
-                There are currently no
-                tournaments matching your
-                filters.
-              </p>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveFilter(
-                    "ALL"
-                  );
-
-                  setSearchQuery(
-                    ""
-                  );
-
-                  setShowCreateModal(
-                    true
-                  );
-                }}
-                className="mt-6 rounded-lg border border-[#f2b632]/60 px-5 py-3 text-sm font-bold text-[#f2b632] transition hover:bg-[#f2b632] hover:text-[#050607]"
-              >
+                <Plus size={14} />
                 Create Tournament
               </button>
+            </div>
+          </header>
+
+          {/* CONTENT */}
+
+          <div className="mwops-content">
+
+            {/* HERO */}
+
+            <section className="mwops-hero">
+              <div className="mwops-hero-copy">
+
+                <div className="mwops-kicker">
+                  Competition Management
+                </div>
+
+                <h1 className="mwops-hero-title">
+                  Your{" "}
+                  <span>
+                    Tournaments
+                  </span>
+                </h1>
+
+                <p>
+                  Create, manage and monitor
+                  every competition running
+                  through the MWOPS esports
+                  operation. Tournament
+                  workspaces keep teams,
+                  matches, rounds and live
+                  production organized in one
+                  place.
+                </p>
+              </div>
+
+              <div className="mwops-hero-meta">
+                <div className="mwops-hero-meta-label">
+                  Active Workspace
+                </div>
+
+                <div className="mwops-hero-meta-value">
+                  {String(
+                    tournaments.length
+                  ).padStart(2, "0")}{" "}
+                  Events
+                </div>
+
+                <div className="mwops-hero-meta-line" />
+              </div>
             </section>
-          )}
 
-          {/* FOOTER */}
+            {/* ERROR */}
 
-          <section className="mwops-footer">
-            <p>
-              MWOPS Competition Management
-            </p>
+            {error && (
+              <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-[#ff3b3b]/30 bg-[#ff3b3b]/10 px-4 py-3 text-sm text-[#ff7777]">
+                <span>
+                  {error}
+                </span>
 
-            <p className="mwops-label">
-              Operations Platform
-            </p>
-          </section>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setError("")
+                  }
+                  className="text-xs font-bold uppercase tracking-wider hover:text-white"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+
+            {/* FILTERS */}
+
+            <section className="mwops-toolbar">
+              <div className="mwops-filters">
+                {STATUS_OPTIONS.map(
+                  (status) => (
+                    <button
+                      key={status}
+                      type="button"
+                      onClick={() =>
+                        setActiveFilter(
+                          status
+                        )
+                      }
+                      className={`mwops-filter ${
+                        activeFilter ===
+                        status
+                          ? "active"
+                          : ""
+                      }`}
+                    >
+                      {status}
+                    </button>
+                  )
+                )}
+              </div>
+
+              <label className="mwops-search">
+                <Search size={14} />
+
+                <input
+                  value={
+                    searchQuery
+                  }
+                  onChange={(
+                    event
+                  ) =>
+                    setSearchQuery(
+                      event.target
+                        .value
+                    )
+                  }
+                  placeholder="Search tournaments..."
+                />
+              </label>
+            </section>
+
+            <div className="mwops-section-head">
+              <div className="mwops-section-title-wrap">
+                <div className="mwops-section-marker" />
+
+                <h2 className="mwops-section-title">
+                  Competition Roster
+                </h2>
+
+                <span className="mwops-count">
+                  {
+                    visibleTournaments.length
+                  }{" "}
+                  shown
+                </span>
+              </div>
+            </div>
+
+            {/* TOURNAMENT GRID */}
+
+            {loading ? (
+              <section className="mwops-tournament-grid">
+                {[1, 2, 3].map(
+                  (item) => (
+                    <div
+                      key={item}
+                      className="h-[292px] animate-pulse rounded-md border border-[#252a2e] bg-[#0b0d0f]"
+                    />
+                  )
+                )}
+              </section>
+            ) : visibleTournaments.length >
+              0 ? (
+              <section className="mwops-tournament-grid">
+
+                {visibleTournaments.map(
+                  (tournament) => (
+                    <TournamentCard
+                      key={
+                        tournament.id
+                      }
+                      tournament={
+                        tournament
+                      }
+                      onManage={
+                        handleManageTournament
+                      }
+                    />
+                  )
+                )}
+
+                {/* CREATE CARD */}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCreateModal(
+                      true
+                    )
+                  }
+                  className="mwops-create-card"
+                >
+                  <div className="mwops-create-icon">
+                    <Plus size={26} />
+                  </div>
+
+                  <h3 className="mwops-create-title">
+                    Create Tournament
+                  </h3>
+
+                  <p className="mwops-create-copy">
+                    Set up a new BGMI
+                    competition and
+                    continue configuring
+                    it from the tournament
+                    workspace.
+                  </p>
+                </button>
+              </section>
+            ) : (
+              <section className="mwops-empty">
+
+                <Trophy
+                  size={38}
+                  className="text-[#f2b632]"
+                />
+
+                <h3 className="mwops-display mt-5 text-3xl">
+                  No Tournaments Found
+                </h3>
+
+                <p className="mt-2 text-sm text-[#6f7479]">
+                  There are currently no
+                  tournaments matching your
+                  filters.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter(
+                      "ALL"
+                    );
+
+                    setSearchQuery(
+                      ""
+                    );
+
+                    setShowCreateModal(
+                      true
+                    );
+                  }}
+                  className="mt-6 rounded-lg border border-[#f2b632]/60 px-5 py-3 text-sm font-bold text-[#f2b632] transition hover:bg-[#f2b632] hover:text-[#050607]"
+                >
+                  Create Tournament
+                </button>
+              </section>
+            )}
+
+            {/* FOOTER */}
+
+            <section className="mwops-footer">
+              <p>
+                MWOPS Competition Management
+              </p>
+
+              <p className="mwops-label">
+                Operations Platform
+              </p>
+            </section>
+          </div>
         </div>
-      </div>
 
-      {/* CREATE MODAL */}
+        {/* CREATE MODAL */}
 
-      {showCreateModal && (
-        <CreateTournamentModal
-          onClose={() =>
-            setShowCreateModal(
-              false
-            )
-          }
-          onCreate={
-            handleCreateTournament
-          }
-          creating={creating}
-        />
-      )}
-    </main>
+        {showCreateModal && (
+          <CreateTournamentModal
+            onClose={() =>
+              setShowCreateModal(
+                false
+              )
+            }
+            onCreate={
+              handleCreateTournament
+            }
+            creating={
+              creating
+            }
+          />
+        )}
+      </main>
     </>
   );
 }
