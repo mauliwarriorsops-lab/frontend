@@ -46,6 +46,7 @@ import {
   Plus,
   RefreshCw,
   Settings,
+  Save,
   Share2,
   Shield,
   Trophy,
@@ -1686,6 +1687,91 @@ const DEFAULT_PLACEMENT_POINTS = [
   0,
 ];
 
+function normalizeScoringConfig(tournament) {
+  const raw =
+    tournament?.scoring_config ??
+    tournament?.scoringConfig ??
+    {};
+
+  const killPointsRaw =
+    raw?.kill_points ??
+    raw?.killPoints ??
+    tournament?.kill_points ??
+    tournament?.elimination_points ??
+    1;
+
+  const placementRaw =
+    raw?.placement_points ??
+    raw?.placementPoints ??
+    [];
+
+  const placementMap = new Map();
+
+  if (Array.isArray(placementRaw)) {
+    placementRaw.forEach((item, index) => {
+      if (
+        item &&
+        typeof item === "object" &&
+        item.place !== undefined
+      ) {
+        placementMap.set(
+          Number(item.place),
+          Math.max(
+            0,
+            Number(item.points) || 0
+          )
+        );
+      } else if (
+        item !== undefined &&
+        item !== null
+      ) {
+        placementMap.set(
+          index + 1,
+          Math.max(0, Number(item) || 0)
+        );
+      }
+    });
+  } else if (
+    placementRaw &&
+    typeof placementRaw === "object"
+  ) {
+    Object.entries(placementRaw).forEach(
+      ([place, points]) => {
+        const position = Number(place);
+
+        if (Number.isInteger(position)) {
+          placementMap.set(
+            position,
+            Math.max(0, Number(points) || 0)
+          );
+        }
+      }
+    );
+  }
+
+  const defaults = [
+    10, 6, 5, 4, 3, 2, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+  ];
+
+  return {
+    killPoints: Math.max(
+      0,
+      Number(killPointsRaw) || 0
+    ),
+
+    placementPoints: Array.from(
+      { length: 25 },
+      (_, index) =>
+        placementMap.has(index + 1)
+          ? placementMap.get(index + 1)
+          : defaults[index] || 0
+    ),
+  };
+}
+
 function SettingsStatCard({
   icon: Icon,
   value,
@@ -1711,7 +1797,8 @@ function SettingsStatCard({
     },
   };
 
-  const style = accents[accent] || accents.cyan;
+  const style =
+    accents[accent] || accents.cyan;
 
   return (
     <div
@@ -1737,6 +1824,7 @@ function SettingsStatCard({
         <p className="mwops-display text-3xl leading-none text-white">
           {value}
         </p>
+
         <p className="mt-2 text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#78827d]">
           {label}
         </p>
@@ -1745,20 +1833,21 @@ function SettingsStatCard({
   );
 }
 
-function PlacementPoint({
+function PlacementPointEditor({
   position,
-  points,
+  value,
+  onChange,
 }) {
-  const highlighted = position <= 3;
-  const hasPoint = Number(points) > 0;
+  const highlighted =
+    position <= 3;
 
   return (
-    <div
-      className={`flex min-h-[44px] items-center justify-between rounded-[9px] border px-3 ${
+    <label
+      className={`flex min-h-[52px] items-center justify-between gap-3 rounded-[9px] border px-3 transition ${
         highlighted
-          ? "border-[#e7ad2e]/20 bg-[#e7ad2e]/[0.035]"
+          ? "border-[#e7ad2e]/25 bg-[#e7ad2e]/[0.04]"
           : "border-white/[0.08] bg-white/[0.018]"
-      }`}
+      } focus-within:border-emerald-300/35`}
     >
       <span
         className={`text-[11px] font-extrabold ${
@@ -1770,16 +1859,21 @@ function PlacementPoint({
         #{position}
       </span>
 
-      <span
-        className={`text-sm font-black ${
-          hasPoint
-            ? "text-[#f3f2ed]"
-            : "text-[#dfe3df]"
-        }`}
-      >
-        {points}
-      </span>
-    </div>
+      <input
+        type="number"
+        min="0"
+        step="1"
+        value={value}
+        onChange={(event) =>
+          onChange(
+            position - 1,
+            event.target.value
+          )
+        }
+        className="w-16 rounded-md border border-transparent bg-[#07110d] px-2 py-1.5 text-right text-sm font-black text-white outline-none transition focus:border-emerald-300/25"
+        aria-label={`Placement points for position ${position}`}
+      />
+    </label>
   );
 }
 
@@ -1788,26 +1882,213 @@ function SettingsPage({
   roundsCount,
   teamsCount,
   matchesCount,
+  onSave,
+  saving,
 }) {
-  const tournamentStatus = String(
-    tournament?.status || "draft"
-  ).toLowerCase();
+  const [
+    killPoints,
+    setKillPoints,
+  ] = useState(1);
 
-  const statusLabel =
-    STATUS_CONFIG[tournamentStatus]?.label ||
-    "DRAFT";
-
-  const placementPoints = Array.from(
-    { length: 25 },
-    (_, index) =>
-      DEFAULT_PLACEMENT_POINTS[index] ?? 0
+  const [
+    placementPoints,
+    setPlacementPoints,
+  ] = useState(
+    DEFAULT_PLACEMENT_POINTS
   );
 
-  const totalConfiguredPlacementPoints =
+  const [
+    dirty,
+    setDirty,
+  ] = useState(false);
+
+  const [
+    localError,
+    setLocalError,
+  ] = useState("");
+
+  /*
+  |--------------------------------------------------------------------------
+  | LOAD CURRENT TOURNAMENT SCORING
+  |--------------------------------------------------------------------------
+  |
+  | The page first uses scoring_config returned by the backend.
+  | If no scoring_config exists yet, it falls back to the MWOPS defaults.
+  |
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    const config =
+      normalizeScoringConfig(
+        tournament
+      );
+
+    setKillPoints(
+      config.killPoints
+    );
+
+    setPlacementPoints(
+      config.placementPoints
+    );
+
+    setDirty(false);
+    setLocalError("");
+  }, [tournament]);
+
+  const updatePlacement = (
+    index,
+    value
+  ) => {
+    const numeric =
+      value === ""
+        ? ""
+        : Math.max(
+            0,
+            Math.floor(
+              Number(value) || 0
+            )
+          );
+
+    setPlacementPoints(
+      (current) =>
+        current.map(
+          (item, itemIndex) =>
+            itemIndex === index
+              ? numeric
+              : item
+        )
+    );
+
+    setDirty(true);
+    setLocalError("");
+  };
+
+  const updateKillPoints = (
+    value
+  ) => {
+    const numeric =
+      value === ""
+        ? ""
+        : Math.max(
+            0,
+            Math.floor(
+              Number(value) || 0
+            )
+          );
+
+    setKillPoints(numeric);
+    setDirty(true);
+    setLocalError("");
+  };
+
+  const handleSave = async () => {
+    const normalizedKillPoints =
+      Number(killPoints);
+
+    if (
+      !Number.isFinite(
+        normalizedKillPoints
+      ) ||
+      normalizedKillPoints < 0
+    ) {
+      setLocalError(
+        "Points per elimination must be 0 or greater."
+      );
+
+      return;
+    }
+
+    const normalizedPlacement =
+      placementPoints.map(
+        (points) =>
+          Math.max(
+            0,
+            Math.floor(
+              Number(points) || 0
+            )
+          )
+      );
+
+    const scoringConfig = {
+      kill_points:
+        normalizedKillPoints,
+
+      placement_points:
+        normalizedPlacement.map(
+          (points, index) => ({
+            place: index + 1,
+            points,
+          })
+        ),
+    };
+
+    setLocalError("");
+
+    const saved =
+      await onSave(
+        scoringConfig
+      );
+
+    if (saved) {
+      setKillPoints(
+        normalizedKillPoints
+      );
+
+      setPlacementPoints(
+        normalizedPlacement
+      );
+
+      setDirty(false);
+    }
+  };
+
+  const resetChanges = () => {
+    const config =
+      normalizeScoringConfig(
+        tournament
+      );
+
+    setKillPoints(
+      config.killPoints
+    );
+
+    setPlacementPoints(
+      config.placementPoints
+    );
+
+    setDirty(false);
+    setLocalError("");
+  };
+
+  const totalPlacementPool =
     placementPoints.reduce(
-      (sum, points) => sum + Number(points || 0),
+      (sum, points) =>
+        sum +
+        (Number(points) || 0),
       0
     );
+
+  const maxPlacement =
+    Math.max(
+      ...placementPoints.map(
+        (points) =>
+          Number(points) || 0
+      ),
+      0
+    );
+
+  const tournamentStatus =
+    String(
+      tournament?.status ||
+        "draft"
+    ).toLowerCase();
+
+  const statusLabel =
+    STATUS_CONFIG[
+      tournamentStatus
+    ]?.label ||
+    "DRAFT";
 
   return (
     <div className="mwops-settings-page min-h-full bg-[#070a09]">
@@ -1839,22 +2120,9 @@ function SettingsPage({
           position: relative;
           overflow: hidden;
           background:
-            radial-gradient(
-              circle at 78% 4%,
-              rgba(77,230,137,.15),
-              transparent 29%
-            ),
-            radial-gradient(
-              circle at 12% 90%,
-              rgba(27,133,78,.13),
-              transparent 28%
-            ),
-            linear-gradient(
-              135deg,
-              rgba(28,91,59,.58),
-              rgba(12,34,25,.96) 42%,
-              rgba(12,25,20,.98)
-            );
+            radial-gradient(circle at 78% 4%,rgba(77,230,137,.15),transparent 29%),
+            radial-gradient(circle at 12% 90%,rgba(27,133,78,.13),transparent 28%),
+            linear-gradient(135deg,rgba(28,91,59,.58),rgba(12,34,25,.96) 42%,rgba(12,25,20,.98));
         }
 
         .mwops-settings-page .settings-green-panel::before {
@@ -1863,52 +2131,39 @@ function SettingsPage({
           inset: 0;
           pointer-events: none;
           background:
-            linear-gradient(
-              90deg,
-              transparent 0%,
-              rgba(255,255,255,.018) 50%,
-              transparent 100%
-            ),
-            linear-gradient(
-              rgba(255,255,255,.016) 1px,
-              transparent 1px
-            ),
-            linear-gradient(
-              90deg,
-              rgba(255,255,255,.016) 1px,
-              transparent 1px
-            );
-          background-size: 100% 100%, 48px 48px, 48px 48px;
-          mask-image: linear-gradient(
-            to bottom,
-            rgba(0,0,0,.9),
-            rgba(0,0,0,.55)
-          );
+            linear-gradient(90deg,transparent 0%,rgba(255,255,255,.018) 50%,transparent 100%),
+            linear-gradient(rgba(255,255,255,.016) 1px,transparent 1px),
+            linear-gradient(90deg,rgba(255,255,255,.016) 1px,transparent 1px);
+          background-size: 100% 100%,48px 48px,48px 48px;
+          mask-image: linear-gradient(to bottom,rgba(0,0,0,.9),rgba(0,0,0,.55));
         }
 
         .mwops-settings-page .settings-panel-line {
           border-color: rgba(170,255,205,.11);
           background: rgba(8,20,15,.24);
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.025),
-            0 18px 50px rgba(0,0,0,.10);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.025),0 18px 50px rgba(0,0,0,.10);
         }
 
         .mwops-settings-page .settings-placement-grid {
           display: grid;
-          grid-template-columns: repeat(8, minmax(0, 1fr));
+          grid-template-columns: repeat(8,minmax(0,1fr));
           gap: 9px;
         }
 
-        @media (max-width: 1100px) {
+        .mwops-settings-page input[type="number"]::-webkit-inner-spin-button,
+        .mwops-settings-page input[type="number"]::-webkit-outer-spin-button {
+          opacity: .55;
+        }
+
+        @media (max-width:1100px) {
           .mwops-settings-page .settings-placement-grid {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
+            grid-template-columns: repeat(4,minmax(0,1fr));
           }
         }
 
-        @media (max-width: 620px) {
+        @media (max-width:620px) {
           .mwops-settings-page .settings-placement-grid {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-columns: repeat(2,minmax(0,1fr));
           }
         }
       `}</style>
@@ -1921,29 +2176,66 @@ function SettingsPage({
             <div>
               <div className="flex items-center gap-3">
                 <span className="h-2.5 w-2.5 rounded-full bg-[#ff6417] shadow-[0_0_16px_rgba(255,100,23,.65)]" />
+
                 <span className="text-[11px] font-black uppercase tracking-[.18em] text-[#ff6417]">
                   Tournament Control
                 </span>
               </div>
 
               <h1 className="settings-display mt-5 max-w-5xl text-4xl uppercase leading-[.92] text-[#f5f4ef] sm:text-5xl xl:text-6xl">
-                {tournament?.name || "TOURNAMENT"}
+                {tournament?.name ||
+                  "TOURNAMENT"}
               </h1>
 
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <StatusBadge status={tournamentStatus} />
+                <StatusBadge
+                  status={
+                    tournamentStatus
+                  }
+                />
 
                 <span className="flex items-center gap-2 text-xs font-bold text-[#68736e]">
                   <Gamepad2 size={14} />
-                  {tournament?.game || "BGMI"}
+                  {tournament?.game ||
+                    "BGMI"}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#303936] bg-[#171c1a] text-[#8c9691]">
-                <Settings size={18} />
-              </div>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={
+                  saving ||
+                  !dirty
+                }
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#35d77b] px-4 text-[10px] font-black uppercase tracking-[.1em] text-[#06100b] shadow-[0_8px_25px_rgba(53,215,123,.12)] transition hover:bg-[#59ef98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {saving ? (
+                  <Loader2
+                    size={15}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Save size={15} />
+                )}
+
+                {saving
+                  ? "Saving..."
+                  : "Save Changes"}
+              </button>
+
+              {dirty && (
+                <button
+                  type="button"
+                  onClick={resetChanges}
+                  disabled={saving}
+                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-[#303936] bg-[#171c1a] px-4 text-[10px] font-black uppercase tracking-[.1em] text-[#8c9691] transition hover:border-[#35d77b]/30 hover:text-white disabled:opacity-40"
+                >
+                  Reset
+                </button>
+              )}
             </div>
           </div>
 
@@ -1960,7 +2252,11 @@ function SettingsPage({
               icon={Gamepad2}
               value={matchesCount}
               label="Total Matches"
-              badge={matchesCount ? "Scheduled" : "No matches"}
+              badge={
+                matchesCount
+                  ? "Scheduled"
+                  : "No matches"
+              }
               accent="orange"
             />
 
@@ -1976,23 +2272,31 @@ function SettingsPage({
       </div>
 
       <section className="relative px-6 py-8 lg:px-10 lg:py-10">
-        <div className="mb-7">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
-              <Trophy size={21} />
-            </div>
+        <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-400/10 text-emerald-300">
+                <Trophy size={21} />
+              </div>
 
-            <div>
-              <h2 className="settings-display text-2xl uppercase text-white sm:text-3xl">
-                Points System
-              </h2>
+              <div>
+                <h2 className="settings-display text-2xl uppercase text-white sm:text-3xl">
+                  Points System
+                </h2>
 
-              <p className="mt-1 text-xs font-medium text-[#74807a]">
-                Define the scoring rules. These automatically apply to live
-                matches and overlays.
-              </p>
+                <p className="mt-1 text-xs font-medium text-[#74807a]">
+                  Configure the scoring rules for this tournament.
+                  Changes are saved to the tournament scoring configuration.
+                </p>
+              </div>
             </div>
           </div>
+
+          {dirty && (
+            <span className="rounded-full border border-amber-300/15 bg-amber-300/[0.05] px-3 py-1.5 text-[9px] font-black uppercase tracking-[.12em] text-amber-200/80">
+              Unsaved Changes
+            </span>
+          )}
         </div>
 
         <div className="settings-green-panel rounded-[15px] border border-emerald-300/10 p-5 shadow-[0_28px_90px_rgba(0,0,0,.28)] sm:p-7 lg:p-8">
@@ -2000,18 +2304,41 @@ function SettingsPage({
             <div className="settings-panel-line flex items-center justify-between gap-5 rounded-[12px] border px-4 py-4 sm:px-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[#ff6417]">
-                  <span className="text-xl font-black">⊙</span>
+                  <span className="text-xl font-black">
+                    ⊙
+                  </span>
                 </div>
 
-                <span className="text-sm font-extrabold text-[#f3f4ef]">
-                  Points Per Elimination
-                </span>
+                <div>
+                  <span className="text-sm font-extrabold text-[#f3f4ef]">
+                    Points Per Elimination
+                  </span>
+                  <p className="mt-0.5 text-[9px] text-[#627068]">
+                    Finish points awarded for each elimination
+                  </p>
+                </div>
               </div>
 
-              <div className="flex h-11 min-w-[68px] items-center justify-center rounded-lg bg-[#08140f] px-5 text-lg font-black text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,.025)]">
-                1
-              </div>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                value={killPoints}
+                onChange={(event) =>
+                  updateKillPoints(
+                    event.target.value
+                  )
+                }
+                className="h-11 w-20 rounded-lg border border-white/[0.04] bg-[#07140f] px-3 text-center text-lg font-black text-white outline-none transition focus:border-emerald-300/30"
+                aria-label="Points per elimination"
+              />
             </div>
+
+            {localError && (
+              <div className="mt-4 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3 text-xs font-bold text-red-200">
+                {localError}
+              </div>
+            )}
 
             <div className="mt-7">
               <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
@@ -2019,8 +2346,9 @@ function SettingsPage({
                   <p className="text-[11px] font-black uppercase tracking-[.13em] text-[#a8b4ad]">
                     Placement Points
                   </p>
+
                   <p className="mt-1 text-[10px] text-[#6f7d75]">
-                    BGMI tournament placement scoring
+                    Edit each position directly. Values are stored per tournament.
                   </p>
                 </div>
 
@@ -2030,34 +2358,87 @@ function SettingsPage({
               </div>
 
               <div className="settings-placement-grid mt-4">
-                {placementPoints.map((points, index) => (
-                  <PlacementPoint
-                    key={index}
-                    position={index + 1}
-                    points={points}
-                  />
-                ))}
+                {placementPoints.map(
+                  (points, index) => (
+                    <PlacementPointEditor
+                      key={index}
+                      position={
+                        index + 1
+                      }
+                      value={
+                        points
+                      }
+                      onChange={
+                        updatePlacement
+                      }
+                    />
+                  )
+                )}
               </div>
             </div>
 
-            <div className="mt-6 flex flex-col gap-3 border-t border-emerald-200/[0.08] pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-6 grid gap-3 border-t border-emerald-200/[0.08] pt-5 sm:grid-cols-3">
+              <div className="rounded-xl border border-emerald-300/10 bg-[#07130e]/55 px-4 py-3">
+                <p className="text-[8px] font-black uppercase tracking-[.13em] text-[#627068]">
+                  Teams
+                </p>
+                <p className="mt-1 text-sm font-black text-[#dfe9e2]">
+                  {teamsCount}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-300/10 bg-[#07130e]/55 px-4 py-3">
+                <p className="text-[8px] font-black uppercase tracking-[.13em] text-[#627068]">
+                  Placement Pool
+                </p>
+                <p className="mt-1 text-sm font-black text-[#dfe9e2]">
+                  {totalPlacementPool} pts
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-300/10 bg-[#07130e]/55 px-4 py-3">
+                <p className="text-[8px] font-black uppercase tracking-[.13em] text-[#627068]">
+                  Highest Placement
+                </p>
+                <p className="mt-1 text-sm font-black text-[#dfe9e2]">
+                  {maxPlacement} pts
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col items-start justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/[0.12] px-4 py-4 sm:flex-row sm:items-center">
               <div>
                 <p className="text-[9px] font-black uppercase tracking-[.15em] text-[#7e8c84]">
                   Configuration Summary
                 </p>
+
                 <p className="mt-1 text-xs text-[#637168]">
                   {teamsCount} teams · {roundsCount} rounds · {matchesCount} matches
                 </p>
               </div>
 
-              <div className="rounded-lg border border-emerald-300/10 bg-[#07130e]/60 px-4 py-2.5 text-right">
-                <p className="text-[8px] font-black uppercase tracking-[.13em] text-[#627068]">
-                  Placement Pool
-                </p>
-                <p className="mt-0.5 text-sm font-black text-[#dfe9e2]">
-                  {totalConfiguredPlacementPoints} pts
-                </p>
-              </div>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={
+                  saving ||
+                  !dirty
+                }
+                className="inline-flex items-center gap-2 rounded-lg bg-[#35d77b] px-4 py-2.5 text-[9px] font-black uppercase tracking-[.12em] text-[#06100b] transition hover:bg-[#59ef98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {saving ? (
+                  <Loader2
+                    size={14}
+                    className="animate-spin"
+                  />
+                ) : (
+                  <Save size={14} />
+                )}
+
+                {saving
+                  ? "Saving..."
+                  : "Save Scoring"}
+              </button>
             </div>
           </div>
         </div>
@@ -2067,7 +2448,7 @@ function SettingsPage({
 }
 
 /*
-|--------------------------------------------------------------------------
+|-------------------------------------------------------------------------- 
 | SETTING ROW
 |--------------------------------------------------------------------------
 */
@@ -2298,6 +2679,17 @@ function TournamentDetail() {
     deletingMatchId,
     setDeletingMatchId,
   ] = useState(null);
+
+  /*
+  |--------------------------------------------------------------------------
+  | TOURNAMENT SETTINGS SAVE STATE
+  |--------------------------------------------------------------------------
+  */
+
+  const [
+    settingsSaving,
+    setSettingsSaving,
+  ] = useState(false);
 
   /*
   |--------------------------------------------------------------------------
@@ -2871,6 +3263,105 @@ function TournamentDetail() {
         behavior: "smooth",
       });
     }, []);
+
+  /*
+  |--------------------------------------------------------------------------
+  | SAVE TOURNAMENT SCORING SETTINGS
+  |--------------------------------------------------------------------------
+  |
+  | scoring_config is the format already used by the tournament creation
+  | flow. The backend must expose this field on PATCH /tournaments/:id.
+  |
+  */
+
+  const handleSaveSettings =
+    useCallback(
+      async (scoringConfig) => {
+        if (!tournamentId) {
+          setError(
+            "Tournament ID is missing."
+          );
+
+          return false;
+        }
+
+        try {
+          setSettingsSaving(true);
+          setError("");
+
+          const data =
+            await request(
+              `/tournaments/${encodeURIComponent(
+                tournamentId
+              )}`,
+              {
+                method: "PATCH",
+                body: {
+                  name:
+                    tournament?.name ||
+                    "Tournament",
+                  scoring_config:
+                    scoringConfig,
+                },
+              }
+            );
+
+          const updatedTournament =
+            data?.tournament ||
+            data?.data ||
+            data;
+
+          if (
+            updatedTournament &&
+            typeof updatedTournament ===
+              "object"
+          ) {
+            setTournament(
+              (current) => ({
+                ...current,
+                ...updatedTournament,
+                scoring_config:
+                  updatedTournament?.scoring_config ??
+                  scoringConfig,
+              })
+            );
+          } else {
+            setTournament(
+              (current) => ({
+                ...current,
+                scoring_config:
+                  scoringConfig,
+              })
+            );
+          }
+
+          showNotice(
+            "Scoring settings saved."
+          );
+
+          return true;
+        } catch (err) {
+          console.error(
+            "Failed to save tournament scoring settings:",
+            err
+          );
+
+          setError(
+            err?.message ||
+              "Failed to save scoring settings."
+          );
+
+          return false;
+        } finally {
+          setSettingsSaving(false);
+        }
+      },
+      [
+        tournamentId,
+        tournament?.name,
+        showNotice,
+      ]
+    );
 
   const handleShareTournament =
     useCallback(async () => {
@@ -4429,6 +4920,12 @@ function TournamentDetail() {
             }
             matchesCount={
               matches.length
+            }
+            onSave={
+              handleSaveSettings
+            }
+            saving={
+              settingsSaving
             }
           />
         )}
