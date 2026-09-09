@@ -59,6 +59,8 @@ import {
   useParams,
 } from "react-router-dom";
 
+import { teamService } from "../../services/team.service.js";
+
 /*
 |--------------------------------------------------------------------------
 | API CONFIGURATION
@@ -618,9 +620,6 @@ function RoundCard({
   onDeleteMatch,
   deletingRoundId,
   deletingMatchId,
-  onSettings,
-  onShare,
-  onDownload,
 }) {
   const state = getRoundState(round.matches);
   const matchCount = round.matches.length;
@@ -1036,6 +1035,9 @@ function RoundsPage({
   onDeleteMatch,
   deletingRoundId,
   deletingMatchId,
+  handleSettingsAction,
+  handleShareAction,
+  handleDownloadAction,
 }) {
   const roundsWithMatches =
     useMemo(() => {
@@ -1218,7 +1220,7 @@ function RoundsPage({
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Tournament Settings"
                 aria-label="Open Tournament Settings"
-                onClick={onSettings}
+                onClick={handleSettingsAction}
               >
                 <Settings size={19} />
               </button>
@@ -1228,7 +1230,7 @@ function RoundsPage({
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Share Tournament"
                 aria-label="Share Tournament"
-                onClick={onShare}
+                onClick={handleShareAction}
               >
                 <Share2 size={18} />
               </button>
@@ -1238,7 +1240,7 @@ function RoundsPage({
                 className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#303634] bg-[#171b1a] text-[#a0a7a4] transition hover:border-[#e7ad2e]/40 hover:text-white"
                 title="Export Tournament"
                 aria-label="Export Tournament"
-                onClick={onDownload}
+                onClick={handleDownloadAction}
               >
                 <Download size={18} />
               </button>
@@ -1702,7 +1704,7 @@ function SettingsPage({
             <SettingRow
               label="Tournament Name"
               value={
-                tournament.name
+                tournament?.name || "—"
               }
             />
 
@@ -2245,21 +2247,20 @@ function TournamentDetail() {
 
           /*
           |--------------------------------------------------------------------------
-          | The MWOPS Teams API returns the registered team records.
-          |
-          | Teams contain tournament_id, so we load the real registry and
-          | keep only teams assigned to this tournament. This is the same
-          | backend relationship used by the match/standings services.
+          | Use the same team service used by the working Teams page.
+          | It already knows how to load teams for a tournament.
           |--------------------------------------------------------------------------
           */
 
-          const data =
-            await request("/teams");
+          const response =
+            await teamService.list(
+              tournamentId
+            );
 
           const raw =
-            data?.teams ??
-            data?.data ??
-            data;
+            response?.teams ??
+            response?.data ??
+            response;
 
           const list =
             Array.isArray(raw)
@@ -2270,33 +2271,9 @@ function TournamentDetail() {
                   ? raw.data
                   : [];
 
-          const tournamentTeams =
+          setTeams(
             list
               .filter(Boolean)
-              .filter((team) => {
-                const teamTournamentId =
-                  team?.tournament_id ??
-                  team?.tournamentId ??
-                  team?.tournament?.id;
-
-                /*
-                 * If the API already returns only the requested scope,
-                 * keep the record. Otherwise require the tournament match.
-                 */
-                if (
-                  teamTournamentId ===
-                    undefined ||
-                  teamTournamentId === null ||
-                  String(teamTournamentId).trim() === ""
-                ) {
-                  return true;
-                }
-
-                return (
-                  String(teamTournamentId) ===
-                  String(tournamentId)
-                );
-              })
               .sort((a, b) => {
                 const slotA =
                   Number(
@@ -2323,23 +2300,25 @@ function TournamentDetail() {
                 return String(
                   a?.name ||
                     a?.short_name ||
-                    ""
+                    ''
                 ).localeCompare(
                   String(
                     b?.name ||
                       b?.short_name ||
-                      ""
+                      ''
                   )
                 );
-              });
-
-          setTeams(tournamentTeams);
+              })
+          );
         } catch (err) {
           console.error(
             "Failed to load tournament teams:",
             err
           );
 
+          /*
+           * Teams must not crash the entire tournament control page.
+           */
           setTeams([]);
         } finally {
           setTeamsLoading(false);
@@ -2367,20 +2346,25 @@ function TournamentDetail() {
         try {
           setStandingsLoading(true);
 
+          /*
+          |--------------------------------------------------------------------------
+          | The backend standings service expects `tournamentId` (camelCase).
+          | The previous version sent `tournament_id`, which produced a 404.
+          |--------------------------------------------------------------------------
+          */
+
           let data;
 
           try {
             data =
               await request(
-                `/standings?tournament_id=${encodeURIComponent(
+                `/standings?tournamentId=${encodeURIComponent(
                   tournamentId
                 )}`
               );
           } catch (primaryError) {
             /*
-             * The official standings service also exposes a leaderboard
-             * route using tournamentId. Keep this as a compatibility
-             * fallback for deployments using that route.
+             * Compatibility fallback for the dedicated leaderboard route.
              */
             data =
               await request(
@@ -2392,20 +2376,23 @@ function TournamentDetail() {
 
           const raw =
             data?.standings ??
+            data?.leaderboard ??
             data?.data ??
             data;
 
-          const standingsData =
+          const list =
             Array.isArray(raw)
               ? raw
               : Array.isArray(raw?.standings)
                 ? raw.standings
-                : Array.isArray(raw?.data)
-                  ? raw.data
-                  : [];
+                : Array.isArray(raw?.leaderboard)
+                  ? raw.leaderboard
+                  : Array.isArray(raw?.data)
+                    ? raw.data
+                    : [];
 
           setStandings(
-            standingsData
+            list
               .filter(Boolean)
               .map((row, index) => ({
                 ...row,
@@ -4111,13 +4098,13 @@ function TournamentDetail() {
             deletingMatchId={
               deletingMatchId
             }
-            onSettings={
+            handleSettingsAction={
               handleOpenSettings
             }
-            onShare={
+            handleShareAction={
               handleShareTournament
             }
-            onDownload={
+            handleDownloadAction={
               handleDownloadTournament
             }
           />
